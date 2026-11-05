@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="PaceMates zeigt Umfang, Intensität, Form und Erholung aus deinen eigenen Ausdauer-Aktivitäten. Die Daten bleiben im Browser."
+    />
+    <meta name="theme-color" content="#f3ecdf" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>PaceMates</title>
+    <script>
+      try {
+        var theme = localStorage.getItem('pacemates.theme');
+        if (theme === 'light' || theme === 'dark') {
+          document.documentElement.setAttribute('data-theme', theme);
+        }
+      } catch (error) {
+        /* Darstellung fällt auf das System zurück. */
+      }
+    </script>
+    <script>
+      (function () {
+        try {
+          var params = new URLSearchParams(window.location.search);
+          var redirect = params.get('p');
+          if (!redirect || !/^\/(?!\/)/.test(redirect)) return;
+          if (redirect.indexOf('://') !== -1 || redirect.indexOf('\\') !== -1) return;
+          window.history.replaceState(null, '', redirect);
+        } catch (error) {
+          /* Ohne Verlaufs-Wiederherstellung bleibt die Startseite. */
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>
+      <p>PaceMates braucht JavaScript. Import und Auswertung laufen in deinem Browser, nicht auf einem Server.</p>
+    </noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
