@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react';
-import { applySportOverride, isSameActivity, withStartTime } from '../lib/activity.ts';
+import { Link } from 'react-router';
+import { ActivityIndex, applySportOverride, withStartTime } from '../lib/activity.ts';
+import { backupFileName, buildBackup } from '../lib/backup.ts';
 import { fromDatetimeLocalValue, toDatetimeLocalValue } from '../lib/dates.ts';
 import { formatDateTime, formatDistance, formatDuration, methodLabel } from '../lib/format.ts';
-import { stravaRedirectUri } from '../lib/paths.ts';
 import { parseFiles } from '../lib/parse/files.ts';
 import { SPORT_ORDER, sportLabel } from '../lib/sport.ts';
-import { beginStravaLogin, fetchStravaActivities, mapStravaActivities, refreshStravaTokens, StravaError } from '../lib/strava.ts';
 import { useDocumentTitle } from '../lib/theme.ts';
-import type { Activity, ParsedDraft, Sport } from '../lib/types.ts';
+import type { Activity, AthleteProfile, ParsedDraft, Sport } from '../lib/types.ts';
+import { StravaPanel } from '../components/StravaPanel.tsx';
 import { SportMark } from '../components/Ui.tsx';
 import { useAthlete } from '../context/athlete-state.ts';
 
@@ -27,17 +28,12 @@ export function DataPage() {
     allLoaded,
     profile,
     updateProfile,
-    stravaSettings,
-    updateStravaSettings,
-    stravaTokens,
-    setStravaTokens,
     notice,
     setNotice,
     commitImport,
     updateActivity,
     removeActivity,
     clearActivities,
-    disconnectStrava,
     clearAllLocal,
   } = useAthlete();
   const [dragOver, setDragOver] = useState(false);
@@ -47,12 +43,12 @@ export function DataPage() {
   const [notes, setNotes] = useState<string[]>([]);
   const [review, setReview] = useState<ReviewRow[] | null>(null);
   const [message, setMessage] = useState('');
-  const [syncing, setSyncing] = useState(false);
-  const [showSecret, setShowSecret] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [confirmClear, setConfirmClear] = useState(false);
+  const [confirmClear, setConfirmClear] = useState<'activities' | 'all' | null>(null);
   const [visible, setVisible] = useState(40);
-  const redirectUri = stravaRedirectUri();
+  const [backupProfile, setBackupProfile] = useState<AthleteProfile | null>(null);
+  const [applyBackupProfile, setApplyBackupProfile] = useState(true);
+  const [justImported, setJustImported] = useState(false);
+  const libraryIndex = useMemo(() => new ActivityIndex(activities), [activities]);
   const loadedById = useMemo(() => new Map(allLoaded.map((activity) => [activity.id, activity])), [allLoaded]);
 
   async function ingest(files: File[]) {
@@ -61,17 +57,23 @@ export function DataPage() {
     setProgress('Dateien werden gelesen …');
     setProblems([]);
     setNotes([]);
+    setJustImported(false);
     try {
       const batch = await parseFiles(files, (done, total) => setProgress(`${done} von ${total} Dateien gelesen …`));
       setProblems(batch.problems);
       setNotes(batch.notes);
+      setBackupProfile(batch.profile ?? null);
+      setApplyBackupProfile(true);
       setReview(batch.drafts.map((draft: ParsedDraft) => ({
         key: draft.activity.id,
         activity: draft.activity,
         include: Boolean(draft.activity.startTime),
         warnings: draft.warnings,
       })));
-      setMessage(batch.drafts.length === 0 ? 'Keine Aktivität erkannt.' : `${batch.drafts.length} Aktivitäten zur Prüfung.`);
+      const missing = batch.drafts.filter((draft) => !draft.activity.startTime).length;
+      setMessage(batch.drafts.length === 0
+        ? 'Keine Aktivität erkannt. Die Gründe stehen unter dem Ablagefeld.'
+        : `${batch.drafts.length} Aktivitäten erkannt. Prüf sie unten und übernimm sie.${missing > 0 ? ` ${missing} haben keine Startzeit und sind abgewählt, bis du eine einträgst.` : ''}`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Import fehlgeschlagen.');
     } finally {
@@ -87,71 +89,74 @@ export function DataPage() {
   function confirmReview() {
     if (!review) return;
     const result = commitImport(review.map((row) => ({ activity: row.activity, include: row.include && Boolean(row.activity.startTime) })));
-    setMessage(`${result.added} neu übernommen, ${result.merged} mit vorhandenen zusammengeführt.`);
+    if (backupProfile && applyBackupProfile) updateProfile(backupProfile);
+    setMessage(`${result.added} neu übernommen, ${result.merged} mit vorhandenen zusammengeführt.${backupProfile && applyBackupProfile ? ' Modell-Eingaben aus der Sicherung übernommen.' : ''}`);
     setReview(null);
+    setBackupProfile(null);
+    setJustImported(result.added + result.merged > 0);
   }
 
-  async function connectStrava() {
-    if (!/^\d{1,12}$/.test(stravaSettings.clientId)) {
-      setMessage('Trag zuerst die Client-ID ein. Ohne sie startet kein Strava-Login.');
-      return;
-    }
-    try {
-      await beginStravaLogin(stravaSettings.clientId);
-    } catch (error) {
-      setMessage(error instanceof StravaError ? error.message : 'Der Strava-Login konnte nicht gestartet werden.');
-    }
-  }
-
-  async function syncStrava() {
-    if (!stravaTokens) return;
-    setSyncing(true);
-    setMessage('Strava wird abgefragt …');
-    try {
-      const fresh = await refreshStravaTokens(stravaSettings, stravaTokens);
-      setStravaTokens(fresh);
-      const raw = await fetchStravaActivities(fresh.accessToken, (count) => setMessage(`${count} Aktivitäten von Strava gelesen …`));
-      const mapped = mapStravaActivities(raw);
-      const result = commitImport(mapped.map((draft) => ({ activity: draft.activity, include: true })));
-      const cap = raw.length >= 4000 ? ' Es wurden höchstens 4000 Aktivitäten geholt.' : '';
-      setMessage(raw.length === 0
-        ? 'Strava hat keine Aktivitäten zurückgegeben.'
-        : `${result.added} neu, ${result.merged} zusammengeführt.${cap}`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Der Abruf ist fehlgeschlagen.');
-    } finally {
-      setSyncing(false);
-    }
-  }
-
-  function exportJson() {
-    const blob = new Blob([JSON.stringify(activities, null, 2)], { type: 'application/json' });
+  function exportBackup() {
+    const blob = new Blob([JSON.stringify(buildBackup(activities, profile), null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'pacemates-aktivitaeten.json';
+    link.download = backupFileName();
     link.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setMessage('Sicherung heruntergeladen. Sie enthält Aktivitäten und Modell-Eingaben, aber keinen Strava-Zugang.');
   }
+
+  const selectedCount = review?.filter((row) => row.include).length ?? 0;
 
   return (
     <>
       <header className="page-head">
         <div>
-          <p className="kicker">Lokal im Browser</p>
-          <h1>Datenquellen</h1>
-          <p>Dateien sind der verlässliche Weg. Strava funktioniert erst mit deiner eigenen API-Anwendung. Garmin läuft über den Export, nicht über einen Login.</p>
+          <p className="kicker">Bleibt in diesem Browser</p>
+          <h1 tabIndex={-1}>Datenquellen</h1>
+          <p className="lead-sm">Dateien funktionieren sofort und ohne Konto. Strava geht über den Login. Garmin geht über den Export.</p>
         </div>
       </header>
-      {storageError ? <p className="note note-warn">{storageError}</p> : null}
-      {notice ? <p className="note" role="status">{notice} <button type="button" className="btn btn-small" onClick={() => setNotice(null)}>Schließen</button></p> : null}
-      {message ? <p className="status" role="status">{message}</p> : null}
+      {storageError ? <p className="note note-warn" role="alert">{storageError}</p> : null}
+      {notice ? (
+        <div className="note note-ok" role="status">
+          <p>{notice}</p>
+          <div className="row-actions">
+            {activities.length > 0 ? <Link className="btn btn-primary btn-small" to="/app">Zur Übersicht</Link> : null}
+            <button type="button" className="btn btn-small" onClick={() => setNotice(null)}>Schließen</button>
+          </div>
+        </div>
+      ) : null}
+      <div aria-live="polite">
+        {message ? <p className="status">{message}</p> : null}
+        {justImported ? (
+          <div className="note note-ok">
+            <p>Deine Einheiten sind gespeichert. Die Auswertung steht.</p>
+            <div className="row-actions">
+              <Link className="btn btn-primary btn-small" to="/app">Übersicht ansehen</Link>
+              <Link className="btn btn-small" to="/app/form#modell">Puls und Schwellen eintragen</Link>
+            </div>
+          </div>
+        ) : null}
+      </div>
 
-      <section className="card" id="dateien">
-        <h2>Dateien importieren</h2>
-        <p>GPX, TCX, FIT, CSV oder ein ZIP daraus. Mehrere Dateien auf einmal sind möglich. Vor dem Speichern siehst du, was erkannt wurde.</p>
+      <nav className="jump" aria-label="Auf dieser Seite">
+        <a href="#dateien">Dateien</a>
+        <a href="#strava">Strava</a>
+        <a href="#garmin">Garmin</a>
+        <a href="#sicherung">Sicherung</a>
+        <a href="#bibliothek">Bibliothek{activities.length > 0 ? ` (${activities.length})` : ''}</a>
+      </nav>
+
+      <section className="card card-primary" id="dateien" aria-labelledby="dateien-titel">
+        <div className="card-head">
+          <h2 id="dateien-titel">Dateien importieren</h2>
+          <span className="badge badge-ok">Sofort</span>
+        </div>
+        <p>GPX, TCX, FIT oder CSV, einzeln, mehrere auf einmal oder als ZIP. Auch eine PaceMates-Sicherung (JSON). Vor dem Speichern siehst du, was erkannt wurde.</p>
         <label
-          className={dragOver ? 'drop dragover' : 'drop'}
+          className={dragOver ? 'drop dragover' : parsing ? 'drop busy' : 'drop'}
           onDragOver={(event) => {
             event.preventDefault();
             setDragOver(true);
@@ -166,25 +171,47 @@ export function DataPage() {
           <input
             type="file"
             multiple
-            accept=".gpx,.tcx,.fit,.csv,.zip,.gz,application/gpx+xml"
+            accept=".gpx,.tcx,.fit,.csv,.zip,.gz,.json,application/gpx+xml"
             onChange={(event) => {
               const files = [...(event.target.files ?? [])];
               event.target.value = '';
               void ingest(files);
             }}
           />
-          <span>{parsing ? progress || 'Lesen …' : 'Dateien auswählen oder hier ablegen'}</span>
-          <em>Die Dateien verlassen diesen Browser nicht.</em>
+          <svg viewBox="0 0 24 24" aria-hidden="true" className="drop-icon"><path d="M12 15V4m0 0L7.5 8.5M12 4l4.5 4.5M5 15v4h14v-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          <strong>{parsing ? progress || 'Lesen …' : 'Dateien auswählen'}</strong>
+          <span>{parsing ? 'Große Archive brauchen ein paar Sekunden.' : 'oder hier ablegen'}</span>
+          <em>Die Dateien werden in deinem Browser gelesen und nicht hochgeladen.</em>
         </label>
-        {problems.map((problem) => <p key={`${problem.file}-${problem.message}`} className="note note-warn">{problem.file}: {problem.message}</p>)}
-        {notes.map((note) => <p key={note} className="meta">{note}</p>)}
+        {problems.length > 0 ? (
+          <div className="note note-warn" role="alert">
+            <p><strong>{problems.length === 1 ? 'Eine Datei' : `${problems.length} Dateien`} nicht übernommen:</strong></p>
+            <ul className="plain">
+              {problems.map((problem) => <li key={`${problem.file}-${problem.message}`}><strong>{problem.file}</strong>: {problem.message}</li>)}
+            </ul>
+          </div>
+        ) : null}
+        {notes.length > 0 ? (
+          <details className="sub">
+            <summary>{notes.length} Hinweise zum Import</summary>
+            <ul className="plain meta">{notes.map((note) => <li key={note}>{note}</li>)}</ul>
+          </details>
+        ) : null}
         {review ? (
-          <div className="review">
+          <div className="review" aria-label="Vorschau vor dem Speichern">
+            <h3>Vorschau: {review.length} erkannt</h3>
+            <p className="meta">Korrigiere Sportart, Name oder Startzeit, falls nötig. Zeilen ohne Startzeit lassen sich erst nach dem Eintragen übernehmen, weil sie sonst keinem Tag zugeordnet werden können.</p>
+            {backupProfile ? (
+              <label className="check">
+                <input type="checkbox" checked={applyBackupProfile} onChange={(event) => setApplyBackupProfile(event.target.checked)} />
+                Modell-Eingaben aus der Sicherung übernehmen (Puls, FTP, Schwellenpace)
+              </label>
+            ) : null}
             <div className="row-actions">
-              <button type="button" className="btn btn-primary" onClick={confirmReview}>
-                {review.filter((row) => row.include).length} übernehmen
+              <button type="button" className="btn btn-primary" onClick={confirmReview} disabled={selectedCount === 0}>
+                {selectedCount === 1 ? '1 Aktivität übernehmen' : `${selectedCount} Aktivitäten übernehmen`}
               </button>
-              <button type="button" className="btn btn-ghost" onClick={() => setReview(null)}>Verwerfen</button>
+              <button type="button" className="btn btn-ghost" onClick={() => { setReview(null); setBackupProfile(null); setMessage('Vorschau verworfen. Es wurde nichts gespeichert.'); }}>Verwerfen</button>
               <button type="button" className="btn btn-small" onClick={() => setReview(review.map((row) => ({ ...row, include: Boolean(row.activity.startTime) })))}>Alle auswählen</button>
               <button type="button" className="btn btn-small" onClick={() => setReview(review.map((row) => ({ ...row, include: false })))}>Keine auswählen</button>
             </div>
@@ -192,7 +219,7 @@ export function DataPage() {
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th scope="col">Übernehmen</th>
+                    <th scope="col"><span className="sr-only">Übernehmen</span></th>
                     <th scope="col">Start</th>
                     <th scope="col">Name</th>
                     <th scope="col">Sport</th>
@@ -203,15 +230,17 @@ export function DataPage() {
                 </thead>
                 <tbody>
                   {review.map((row) => {
-                    const match = activities.find((activity) => isSameActivity(activity, row.activity));
+                    const index = libraryIndex.find(row.activity);
+                    const match = index === -1 ? undefined : libraryIndex.items[index];
                     return (
-                      <tr key={row.key}>
-                        <td><input type="checkbox" checked={row.include} aria-label={`Übernehmen: ${row.activity.name}`} onChange={(event) => updateRow(row.key, row.activity, event.target.checked)} /></td>
+                      <tr key={row.key} className={row.activity.startTime ? undefined : 'row-warn'}>
+                        <td><input type="checkbox" checked={row.include} disabled={!row.activity.startTime} aria-label={`Übernehmen: ${row.activity.name}`} onChange={(event) => updateRow(row.key, row.activity, event.target.checked)} /></td>
                         <td>
                           <input
                             type="datetime-local"
                             value={toDatetimeLocalValue(row.activity.startTime)}
                             aria-label={`Startzeit für ${row.activity.name}`}
+                            aria-invalid={!row.activity.startTime}
                             onChange={(event) => updateRow(row.key, withStartTime(row.activity, fromDatetimeLocalValue(event.target.value)))}
                           />
                         </td>
@@ -228,7 +257,7 @@ export function DataPage() {
                         <td className="num">{formatDistance(row.activity.distanceM)}</td>
                         <td className="num">{formatDuration(row.activity.durationSec)}</td>
                         <td>
-                          {match ? `Führt mit „${match.name}“ zusammen` : 'Neu'}
+                          {!row.activity.startTime ? <strong className="warn-text">Startzeit fehlt</strong> : match ? `Schon da: „${match.name}“, wird ergänzt` : 'Neu'}
                           {row.warnings.map((warning) => <span key={warning} className="meta">{warning}</span>)}
                         </td>
                       </tr>
@@ -239,84 +268,63 @@ export function DataPage() {
             </div>
           </div>
         ) : null}
+        <details className="sub">
+          <summary>Woher bekomme ich die Dateien?</summary>
+          <dl className="howto">
+            <div>
+              <dt>Garmin Connect, eine Aktivität</dt>
+              <dd>Aktivität öffnen, über das Zahnrad „Original exportieren“ (FIT in einer ZIP) oder „In GPX/TCX exportieren“ wählen.</dd>
+            </div>
+            <div>
+              <dt>Garmin Connect, alles</dt>
+              <dd>Im Garmin-Konto den Datenexport anfordern. Garmin schickt einen Link zu einer großen ZIP. Darin liegen die FIT-Dateien. Lade die ZIP oder die enthaltenen Aktivitäts-ZIPs hier hoch.</dd>
+            </div>
+            <div>
+              <dt>Strava, alles</dt>
+              <dd>Einstellungen → Mein Konto → „Konto herunterladen oder löschen“ → Archiv anfordern. Die ZIP enthält <code>activities.csv</code> und die Originaldateien.</dd>
+            </div>
+            <div>
+              <dt>Andere Uhren und Apps</dt>
+              <dd>Fast jede Plattform exportiert GPX, TCX oder FIT. Je mehr die Datei enthält (Puls, Leistung), desto genauer die Belastung.</dd>
+            </div>
+          </dl>
+          <p className="meta">Die Menüs ändern die Anbieter gelegentlich. Entscheidend ist die Datei.</p>
+        </details>
       </section>
 
-      <section className="card" id="strava">
-        <h2>Strava</h2>
-        <p>Lege unter <a href="https://www.strava.com/settings/api" target="_blank" rel="noreferrer">strava.com/settings/api</a> eine API-Anwendung an. Als Authorization Callback Domain trägst du die Domain dieser PaceMates-Seite ein. Die genaue Rückleitungs-URL steht unten und muss in der Anwendung erlaubt sein.</p>
-        <label className="field">
-          <span>Rückleitungs-URL</span>
-          <input readOnly value={redirectUri} onFocus={(event) => event.target.select()} />
-        </label>
-        <button
-          type="button"
-          className="btn btn-small"
-          onClick={() => {
-            void navigator.clipboard?.writeText(redirectUri).then(() => setCopied(true)).catch(() => setCopied(false));
-          }}
-        >
-          {copied ? 'Kopiert' : 'URL kopieren'}
-        </button>
-        <div className="form-grid">
-          <label className="field">
-            <span>Client-ID</span>
-            <input inputMode="numeric" autoComplete="off" value={stravaSettings.clientId} onChange={(event) => updateStravaSettings({ clientId: event.target.value.replace(/\D/g, '').slice(0, 12) })} />
-          </label>
-          <label className="field">
-            <span>Client Secret, nur lokal</span>
-            <input type={showSecret ? 'text' : 'password'} autoComplete="off" value={stravaSettings.clientSecret} onChange={(event) => updateStravaSettings({ clientSecret: event.target.value })} />
-            <button type="button" className="btn btn-small" onClick={() => setShowSecret((value) => !value)}>{showSecret ? 'Verbergen' : 'Anzeigen'}</button>
-          </label>
+      <StravaPanel onMessage={setMessage} />
+
+      <section className="card" id="garmin" aria-labelledby="garmin-titel">
+        <div className="card-head">
+          <h2 id="garmin-titel">Garmin</h2>
+          <span className="badge">Über Export</span>
         </div>
-        <p className="note">Strava tauscht den Code nur mit Client Secret. PaceMates schickt zusätzlich PKCE mit, der Token-Endpunkt akzeptiert den Tausch derzeit aber nicht ohne Secret. Das Secret bleibt im lokalen Speicher dieses Browsers und gehört nicht ins Repository. Auf einem geteilten Rechner solltest du es nicht eintragen.</p>
-        {!stravaSettings.clientId ? <p className="note">Ohne Client-ID bleibt der Button untätig. Eine Verbindung wird nicht vorgetäuscht.</p> : null}
-        {stravaSettings.clientId && !stravaSettings.clientSecret ? <p className="note note-warn">Ohne lokal gespeichertes Secret wird Strava den Token-Tausch ablehnen. Der Login bei Strava kann trotzdem starten.</p> : null}
+        <p>Exportiere Aktivitäten aus Garmin Connect als FIT, GPX oder TCX und leg sie oben ab. FIT ist meist die vollständigste Datei, weil Puls, Leistung und manchmal ein Trainingswert mitkommen.</p>
+        <p className="meta">Einen Garmin-Login gibt es nicht. Die Garmin Connect Developer API ist nur für freigegebene Partner zugänglich. PaceMates ist kein solcher Partner, und eine Anmeldung wird nicht vorgetäuscht.</p>
+      </section>
+
+      <section className="card" id="sicherung" aria-labelledby="sicherung-titel">
+        <h2 id="sicherung-titel">Sicherung und Gerätewechsel</h2>
+        <p>PaceMates hat kein Konto und keine Cloud. Deine Bibliothek liegt nur in diesem Browser auf diesem Gerät. Ein anderes Gerät oder ein anderer Browser sieht sie nicht. Wenn du Browserdaten löschst, ist sie weg.</p>
+        <ol className="steps-inline">
+          <li>Hier eine Sicherung herunterladen.</li>
+          <li>Die Datei auf das andere Gerät bringen.</li>
+          <li>Dort in PaceMates bei den Dateien ablegen.</li>
+        </ol>
         <div className="row-actions">
-          <button type="button" className="btn btn-primary" onClick={() => void connectStrava()} disabled={!stravaSettings.clientId}>Mit Strava verbinden</button>
-          {stravaTokens ? <button type="button" className="btn btn-ghost" onClick={() => void syncStrava()} disabled={syncing}>{syncing ? 'Holt …' : 'Aktivitäten holen'}</button> : null}
-          {stravaTokens ? <button type="button" className="btn btn-ghost" onClick={disconnectStrava}>Verbindung trennen</button> : null}
+          <button type="button" className="btn btn-primary" onClick={exportBackup} disabled={activities.length === 0}>Sicherung herunterladen</button>
         </div>
-        {stravaTokens ? (
-          <p className="meta">
-            {stravaTokens.athleteLabel ? `Verbunden als ${stravaTokens.athleteLabel}. ` : 'Token gespeichert. '}
-            Zugang gültig bis {formatDateTime(new Date(stravaTokens.expiresAt * 1000).toISOString())}.
-            {stravaTokens.scope ? ` Freigabe: ${stravaTokens.scope}.` : ''}
-          </p>
-        ) : <p className="meta">Nicht verbunden.</p>}
-        <p className="meta">Ohne API geht der Export aus Strava: In den Profileinstellungen kannst du deine Daten anfordern. Die ZIP enthält activities.csv und GPX-Dateien. Beides kannst du oben ablegen. Doppelte Einheiten werden zusammengeführt.</p>
+        <p className="meta">Die Sicherung enthält Aktivitäten, deinen Namen und die Modell-Eingaben. Strava-Zugang und Client Secret sind nicht enthalten. Bewahre die Datei auf wie andere persönliche Daten.</p>
       </section>
 
-      <section className="card" id="garmin">
-        <h2>Garmin</h2>
-        <h3>Was jetzt funktioniert</h3>
-        <p>Exportiere Aktivitäten aus Garmin Connect als FIT, GPX oder TCX und importiere sie oben. Ein ZIP mit mehreren Dateien geht auch. FIT ist oft die vollständigste Datei, weil Puls, Leistung und manchmal ein TSS mitkommen.</p>
-        <h3>So kommst du an die Datei</h3>
-        <p>Öffne die Aktivität in Garmin Connect und suche den Export, oft über das Zahnrad, als Original-FIT, GPX oder TCX. Für viele Einheiten auf einmal gibt es in den Kontoeinstellungen einen Datenexport. Die Menüs ändert Garmin gelegentlich. Entscheidend ist die Datei.</p>
-        <h3>Was nicht geht</h3>
-        <p>Die Garmin Connect Developer API und die Consumer Data API sind nicht offen. Zugang läuft über Garmins Entwicklerprogramm und ist hier nicht eingebaut. Es gibt keinen Garmin-Login, und eine Anmeldung wird nicht vorgetäuscht.</p>
-      </section>
-
-      <section className="card" id="bibliothek">
-        <h2>Bibliothek</h2>
+      <section className="card" id="bibliothek" aria-labelledby="bibliothek-titel">
+        <h2 id="bibliothek-titel">Bibliothek</h2>
         {!ready ? <p className="status">Aktivitäten werden gelesen …</p> : null}
         <label className="check">
           <input type="checkbox" checked={profile.includeCommutes} onChange={(event) => updateProfile({ includeCommutes: event.target.checked })} />
           Pendelfahrten in den Auswertungen mitzählen
         </label>
-        <p className="meta">{activities.length} gespeicherte Aktivitäten. Die Auswertungen nutzen {profile.includeCommutes ? 'alle' : 'alle außer Pendeln'}.</p>
-        <div className="row-actions">
-          <button type="button" className="btn btn-ghost" onClick={exportJson} disabled={activities.length === 0}>JSON exportieren</button>
-          {confirmClear ? (
-            <>
-              <span>Alle Aktivitäten löschen?</span>
-              <button type="button" className="btn btn-danger" onClick={() => { clearActivities(); setConfirmClear(false); setMessage('Alle Aktivitäten sind gelöscht.'); }}>Ja, löschen</button>
-              <button type="button" className="btn btn-ghost" onClick={() => setConfirmClear(false)}>Abbrechen</button>
-            </>
-          ) : (
-            <button type="button" className="btn btn-danger" onClick={() => setConfirmClear(true)} disabled={activities.length === 0}>Alle Aktivitäten löschen</button>
-          )}
-          <button type="button" className="btn btn-ghost" onClick={clearAllLocal}>Name, Strava und Aktivitäten löschen</button>
-        </div>
+        <p className="meta">{activities.length === 0 ? 'Noch keine Aktivität gespeichert.' : `${activities.length} gespeicherte Aktivitäten. Die Auswertungen nutzen ${profile.includeCommutes ? 'alle' : 'alle außer Pendeln'}.`}</p>
         <ul className="activity-list">
           {allLoaded.slice(0, visible).map((activity) => {
             const loaded = loadedById.get(activity.id) ?? activity;
@@ -343,13 +351,41 @@ export function DataPage() {
                       {SPORT_ORDER.map((sport) => <option key={sport} value={sport}>{sportLabel(sport)}</option>)}
                     </select>
                   </label>
-                  <button type="button" className="btn btn-small" onClick={() => removeActivity(activity.id)}>Löschen</button>
+                  <button type="button" className="btn btn-small" onClick={() => removeActivity(activity.id)} aria-label={`${activity.name} löschen`}>Löschen</button>
                 </div>
               </li>
             );
           })}
         </ul>
-        {visible < allLoaded.length ? <button type="button" className="btn btn-ghost" onClick={() => setVisible((count) => count + 40)}>Weitere zeigen</button> : null}
+        {visible < allLoaded.length ? <button type="button" className="btn btn-ghost" onClick={() => setVisible((count) => count + 40)}>Weitere zeigen ({allLoaded.length - visible})</button> : null}
+      </section>
+
+      <section className="card card-danger" aria-labelledby="loeschen-titel">
+        <h2 id="loeschen-titel">Löschen</h2>
+        <p className="meta">Löschen wirkt nur in diesem Browser. Bei Strava ändert sich dadurch nichts.</p>
+        {confirmClear ? (
+          <div className="row-actions" role="alertdialog" aria-label="Löschen bestätigen">
+            <span>{confirmClear === 'all' ? 'Name, Modell-Eingaben, Strava-Zugang und alle Aktivitäten löschen?' : 'Alle Aktivitäten löschen?'}</span>
+            <button
+              type="button"
+              className="btn btn-danger"
+              onClick={() => {
+                if (confirmClear === 'all') clearAllLocal();
+                else clearActivities();
+                setConfirmClear(null);
+                setMessage(confirmClear === 'all' ? 'Alles in diesem Browser ist gelöscht.' : 'Alle Aktivitäten sind gelöscht.');
+              }}
+            >
+              Ja, löschen
+            </button>
+            <button type="button" className="btn btn-ghost" onClick={() => setConfirmClear(null)}>Abbrechen</button>
+          </div>
+        ) : (
+          <div className="row-actions">
+            <button type="button" className="btn btn-danger" onClick={() => setConfirmClear('activities')} disabled={activities.length === 0}>Alle Aktivitäten löschen</button>
+            <button type="button" className="btn btn-danger" onClick={() => setConfirmClear('all')}>Alles löschen</button>
+          </div>
+        )}
       </section>
     </>
   );

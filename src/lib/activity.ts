@@ -216,14 +216,88 @@ export function mergeActivities(existing: Activity, incoming: Activity): Activit
   };
 }
 
-export function collapseDuplicates(list: Activity[]): Activity[] {
-  const collapsed: Activity[] = [];
-  for (const activity of list) {
-    const index = collapsed.findIndex((existing) => isSameActivity(existing, activity));
-    if (index === -1) collapsed.push(activity);
-    else collapsed[index] = mergeActivities(collapsed[index]!, activity);
+const BUCKET_MS = 3 * 60_000;
+
+/**
+ * Schneller Abgleich für große Bibliotheken. Kandidaten kommen aus der externen ID
+ * oder aus dem Startzeit-Fenster von ±3 Minuten. Entschieden wird weiter mit isSameActivity.
+ */
+export class ActivityIndex {
+  readonly items: Activity[];
+  private byExternal = new Map<string, number>();
+  private byBucket = new Map<number, Set<number>>();
+
+  constructor(list: Activity[] = []) {
+    this.items = [];
+    for (const activity of list) this.add(activity);
   }
-  return collapsed;
+
+  private bucket(activity: Activity): number | undefined {
+    const time = Date.parse(activity.startTime);
+    return Number.isFinite(time) ? Math.floor(time / BUCKET_MS) : undefined;
+  }
+
+  private register(index: number): void {
+    const activity = this.items[index]!;
+    for (const id of externalIds(activity)) this.byExternal.set(id, index);
+    const bucket = this.bucket(activity);
+    if (bucket === undefined) return;
+    const set = this.byBucket.get(bucket) ?? new Set<number>();
+    set.add(index);
+    this.byBucket.set(bucket, set);
+  }
+
+  private unregister(index: number): void {
+    const activity = this.items[index]!;
+    for (const id of externalIds(activity)) if (this.byExternal.get(id) === index) this.byExternal.delete(id);
+    const bucket = this.bucket(activity);
+    if (bucket !== undefined) this.byBucket.get(bucket)?.delete(index);
+  }
+
+  find(activity: Activity): number {
+    for (const id of externalIds(activity)) {
+      const hit = this.byExternal.get(id);
+      if (hit !== undefined) return hit;
+    }
+    const bucket = this.bucket(activity);
+    if (bucket === undefined) return -1;
+    const candidates: number[] = [];
+    for (const offset of [-1, 0, 1]) {
+      for (const index of this.byBucket.get(bucket + offset) ?? []) candidates.push(index);
+    }
+    candidates.sort((a, b) => a - b);
+    return candidates.find((index) => isSameActivity(this.items[index]!, activity)) ?? -1;
+  }
+
+  add(activity: Activity): number {
+    this.items.push(activity);
+    const index = this.items.length - 1;
+    this.register(index);
+    return index;
+  }
+
+  replace(index: number, activity: Activity): void {
+    this.unregister(index);
+    this.items[index] = activity;
+    this.register(index);
+  }
+
+  /** Fügt hinzu oder führt zusammen. Gibt zurück, was passiert ist. */
+  upsert(activity: Activity): 'added' | 'merged' {
+    const index = this.find(activity);
+    if (index === -1) {
+      this.add(activity);
+      return 'added';
+    }
+    this.replace(index, mergeActivities(this.items[index]!, activity));
+    return 'merged';
+  }
+}
+
+export function collapseDuplicates(list: Activity[]): Activity[] {
+  const index = new ActivityIndex();
+  for (const activity of list) index.upsert(activity);
+  return index.items;
 }
 
 export function applySportOverride(activity: Activity, sport: Sport): Activity {
@@ -258,18 +332,12 @@ export interface ImportSelection {
 
 export function applyImport(existing: Activity[], selection: ImportSelection[]): { activities: Activity[]; added: number; merged: number } {
   const chosen = collapseDuplicates(selection.filter((item) => item.include && item.activity.startTime).map((item) => item.activity));
-  const activities = [...existing];
+  const index = new ActivityIndex(existing);
   let added = 0;
   let merged = 0;
   for (const activity of chosen) {
-    const index = activities.findIndex((item) => isSameActivity(item, activity));
-    if (index === -1) {
-      activities.push(activity);
-      added += 1;
-    } else {
-      activities[index] = mergeActivities(activities[index]!, activity);
-      merged += 1;
-    }
+    if (index.upsert(activity) === 'added') added += 1;
+    else merged += 1;
   }
-  return { activities, added, merged };
+  return { activities: index.items, added, merged };
 }

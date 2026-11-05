@@ -7,7 +7,7 @@ import { useDocumentTitle } from '../lib/theme.ts';
 export function TipsPage() {
   useDocumentTitle('Tipps');
   const { ready, storageError, evaluated } = useAthlete();
-  if (storageError) return <EmptyState title="Speicher nicht verfügbar" body={storageError} />;
+  if (storageError) return <EmptyState level={1} title="Speicher nicht verfügbar" body={storageError} />;
   if (!ready) return <p className="status">Aktivitäten werden gelesen …</p>;
   const report = buildTips(evaluated);
   return (
@@ -15,7 +15,7 @@ export function TipsPage() {
       <header className="page-head">
         <div>
           <p className="kicker">Nur aus gerechneten Werten</p>
-          <h1>Tipps</h1>
+          <h1 tabIndex={-1}>Tipps</h1>
           <p>Jeder Hinweis nennt die Kennzahl, aus der er kommt. Wenn die Daten nicht reichen, bleibt die Liste leer.</p>
         </div>
       </header>

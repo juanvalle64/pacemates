@@ -193,11 +193,15 @@ export function activitiesFromFitMessages(messages: FitLike, fileName: string): 
 export function parseFit(bytes: Uint8Array, fileName: string): ParsedDraft[] {
   const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
   const probe = Stream.fromArrayBuffer(buffer);
-  if (!Decoder.isFIT(probe)) throw new Error('Keine FIT-Datei.');
+  if (!Decoder.isFIT(probe)) throw new Error('Das ist keine gültige FIT-Datei. Exportiere die Aktivität in Garmin Connect als Original-FIT.');
   const stream = Stream.fromArrayBuffer(buffer);
   const decoder = new Decoder(stream);
   const { messages, errors } = decoder.read();
   const drafts = activitiesFromFitMessages(messages, fileName);
-  if (drafts.length === 0) throw new Error(errors[0]?.message || 'Keine Trainingseinheit in der FIT-Datei.');
+  if (drafts.length === 0) {
+    throw new Error(errors.length > 0
+      ? 'Die FIT-Datei ist beschädigt oder unvollständig. Exportiere die Aktivität noch einmal als Original-FIT.'
+      : 'In der FIT-Datei steht keine Trainingseinheit. Geräte- oder Einstellungsdateien enthalten keine Aktivität.');
+  }
   return drafts;
 }

@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router';
-import { EmptyState } from '../components/Ui.tsx';
+import { EmptyState, NoDataYet } from '../components/Ui.tsx';
 import { useAthlete } from '../context/athlete-state.ts';
 import { comparePreset, daysInRange, rangeFromKeys, type ComparePreset, type DateRange } from '../lib/dates.ts';
 import { formatDate, formatDelta, formatDistance, formatDuration, formatLoad, formatNumber, formatRange } from '../lib/format.ts';
@@ -36,13 +35,11 @@ export function Compare() {
   const [previousStart, setPreviousStart] = useState('');
   const [previousEnd, setPreviousEnd] = useState('');
   const [now] = useState(() => new Date());
-  if (storageError) return <EmptyState title="Speicher nicht verfügbar" body={storageError} />;
+  if (storageError) return <EmptyState level={1} title="Speicher nicht verfügbar" body={storageError} />;
   if (!ready) return <p className="status">Aktivitäten werden gelesen …</p>;
   if (evaluated.length === 0) {
     return (
-      <EmptyState title="Noch nichts zu vergleichen" body="Vergleiche entstehen aus importierten Einheiten. Ohne Daten gibt es keine Differenz.">
-        <Link className="btn btn-primary" to="/app/daten">Daten hinzufügen</Link>
-      </EmptyState>
+      <NoDataYet title="Noch nichts zu vergleichen" body="Hier stellst du zwei Zeiträume nebeneinander: diese Woche gegen die letzte, Monat gegen Monat oder frei gewählt. Dafür braucht es importierte Einheiten." />
     );
   }
   let current: Side | null = null;
@@ -105,7 +102,7 @@ export function Compare() {
       <header className="page-head">
         <div>
           <p className="kicker">Zwei Zeiträume</p>
-          <h1>Vergleich</h1>
+          <h1 tabIndex={-1}>Vergleich</h1>
           <p>Unterschied = linker Zeitraum minus rechter Zeitraum. Mehr Umfang ist hier nicht als besser markiert.</p>
         </div>
       </header>

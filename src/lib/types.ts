@@ -70,6 +70,8 @@ export interface StravaTokens {
   expiresAt: number;
   athleteLabel?: string;
   scope?: string;
+  /** Über welchen Weg das Token geholt wurde. Ältere Einträge ohne Angabe gelten als eigene API-Anwendung. */
+  via?: 'hosted' | 'own';
 }
 
 export interface DailyPoint {
@@ -99,6 +101,8 @@ export interface ParseBatch {
   drafts: ParsedDraft[];
   problems: ParseProblem[];
   notes: string[];
+  /** Modell-Eingaben aus einer PaceMates-Sicherung, falls vorhanden. */
+  profile?: AthleteProfile;
 }
 
 export const defaultProfile: AthleteProfile = {

@@ -1,0 +1,15 @@
+{
+  "name": "PaceMates",
+  "short_name": "PaceMates",
+  "description": "Ausdauer, aus deinen Daten.",
+  "lang": "de",
+  "start_url": "./app",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f3f0e8",
+  "theme_color": "#b0361a",
+  "icons": [
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

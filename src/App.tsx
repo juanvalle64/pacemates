@@ -11,6 +11,8 @@ const Compare = lazy(() => import('./pages/Compare.tsx').then((module) => ({ def
 const FormPage = lazy(() => import('./pages/FormPage.tsx').then((module) => ({ default: module.FormPage })));
 const TipsPage = lazy(() => import('./pages/TipsPage.tsx').then((module) => ({ default: module.TipsPage })));
 const DataPage = lazy(() => import('./pages/DataPage.tsx').then((module) => ({ default: module.DataPage })));
+const Impressum = lazy(() => import('./pages/Legal.tsx').then((module) => ({ default: module.Impressum })));
+const Datenschutz = lazy(() => import('./pages/Legal.tsx').then((module) => ({ default: module.Datenschutz })));
 const StravaCallback = lazy(() => import('./pages/StravaCallback.tsx').then((module) => ({ default: module.StravaCallback })));
 
 interface BoundaryState { error: Error | null }
@@ -22,9 +24,10 @@ class Boundary extends Component<{ children: ReactNode }, BoundaryState> {
   render() {
     if (this.state.error) {
       return (
-        <main className="page">
+        <main className="page narrow" role="alert">
           <h1>Etwas ist schiefgelaufen</h1>
           <p>{this.state.error.message}</p>
+          <p className="meta">Deine gespeicherten Aktivitäten sind davon nicht betroffen.</p>
           <button type="button" className="btn btn-primary" onClick={() => this.setState({ error: null })}>Erneut versuchen</button>
         </main>
       );
@@ -60,6 +63,8 @@ export default function App() {
               <Route path="daten" element={<DataPage />} />
             </Route>
             <Route path="/strava/callback" element={<StravaCallback />} />
+            <Route path="/impressum" element={<Impressum />} />
+            <Route path="/datenschutz" element={<Datenschutz />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
           </Suspense>

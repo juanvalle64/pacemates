@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { StackedBars } from '../components/Charts.tsx';
 import { SPORT_COLOR } from '../lib/colors.ts';
+import { Onboarding } from '../components/Onboarding.tsx';
 import { EmptyState, SportMark } from '../components/Ui.tsx';
+import { highestRecordedHr, loadMix, readForm } from '../lib/form-reading.ts';
 import { useAthlete } from '../context/athlete-state.ts';
 import { presetRange, type RangePreset } from '../lib/dates.ts';
 import { formatDate, formatDateKey, formatDistance, formatDuration, formatLoad, formatMeters, formatRange, formatRunPace, formatSpeed, formatSwimPace } from '../lib/format.ts';
@@ -37,32 +39,17 @@ export function Overview() {
   const range = presetRange(preset, now, earliest ?? undefined);
   const available = SPORT_ORDER.filter((item) => evaluated.some((activity) => activity.sport === item || activity.legs.some((leg) => leg.sport === item)));
 
-  if (storageError) return <EmptyState title="Speicher nicht verfügbar" body={storageError} />;
+  if (storageError) return <EmptyState level={1} title="Speicher nicht verfügbar" body={storageError} />;
   if (!ready) return <p className="status">Aktivitäten werden gelesen …</p>;
-  if (evaluated.length === 0) {
-    return (
-      <EmptyState
-        title="Noch keine Aktivitäten"
-        body="PaceMates rechnet erst, wenn echte Einheiten da sind. Importiere GPX, TCX, FIT oder CSV, oder verbinde Strava, sobald eine Client-ID hinterlegt ist. Beispieldaten gibt es hier nicht."
-      >
-        <Link className="btn btn-primary" to="/app/daten">Daten hinzufügen</Link>
-      </EmptyState>
-    );
-  }
+  if (evaluated.length === 0) return <Onboarding />;
   if (!range) return null;
   const totals = aggregate(evaluated, range, sport);
   const weeks = weeklyBuckets(evaluated, range, sport, now);
   const latest = series[series.length - 1];
-  const history = series.length;
-  const formText = !latest
-    ? ''
-    : history < 28
-      ? 'Die Zeitreihe ist noch kurz. Die Zahl beschreibt vor allem den Start bei null.'
-      : latest.tsb >= 15
-        ? 'Erholt gegenüber der letzten Belastung.'
-        : latest.tsb >= -10
-          ? 'Nahe am Gleichgewicht.'
-          : 'Ermüdet gegenüber der Fitness.';
+  const reading = readForm(series, evaluated, now);
+  const mix = loadMix(evaluated);
+  const modelEmpty = !profile.maxHr && !profile.restHr && !profile.ftp && !profile.runThresholdPaceSec && !profile.swimThresholdPaceSec;
+  const recordedHr = highestRecordedHr(evaluated);
   const commuteHidden = !profile.includeCommutes;
 
   return (
@@ -70,7 +57,7 @@ export function Overview() {
       <header className="page-head">
         <div>
           <p className="kicker">{profile.name || 'Dein Training'}</p>
-          <h1>Übersicht</h1>
+          <h1 tabIndex={-1}>Übersicht</h1>
           <p>{formatRange(range.start, range.end)}</p>
         </div>
         <div className="chip-row" role="group" aria-label="Zeitraum">
@@ -82,6 +69,12 @@ export function Overview() {
         </div>
       </header>
       {commuteHidden ? <p className="note">Pendelfahrten sind aus den Summen ausgenommen.</p> : null}
+      {mix.proxyShare > 0.5 && modelEmpty ? (
+        <div className="note note-action">
+          <p><strong>Die Belastung ist noch grob.</strong> {Math.round(mix.proxyShare * 100)} % kommen aus einem Dauer-Proxy, weil Puls-, Leistungs- oder Pace-Schwellen fehlen.{recordedHr ? ` Dein höchster Puls in den Daten ist ${recordedHr} bpm.` : ''}</p>
+          <Link className="btn btn-small" to="/app/form#modell">Werte eintragen</Link>
+        </div>
+      ) : null}
       <div className="chip-row" role="group" aria-label="Sportart">
         <button type="button" className={sport === 'all' ? 'chip active' : 'chip'} aria-pressed={sport === 'all'} onClick={() => setSport('all')}>Alle</button>
         {available.map((item) => (
@@ -131,15 +124,18 @@ export function Overview() {
               </ul>
             </section>
           ) : null}
-          {latest ? (
-            <section className="card card-accent">
-              <h2>Form</h2>
+          {latest && reading ? (
+            <section className={`card card-accent form-${reading.tone}`}>
+              <div className="card-head">
+                <h2>Form</h2>
+                <span className={`badge badge-${reading.tone}`}>{reading.title}</span>
+              </div>
               <div className="stat-grid compact">
                 <article className="stat"><span>Fitness, CTL</span><strong className="num">{formatLoad(latest.ctl)}</strong></article>
                 <article className="stat"><span>Ermüdung, ATL</span><strong className="num">{formatLoad(latest.atl)}</strong></article>
                 <article className="stat"><span>Form heute früh, TSB</span><strong className="num">{formatLoad(latest.tsb)}</strong></article>
               </div>
-              <p>{formText} {history < 42 ? 'Stabiler wird das Modell nach etwa 42 Tagen.' : `Die Historie umfasst ${history} Tage.`}</p>
+              <p>{reading.body}</p>
               <p className="meta">Fitness und Ermüdung schließen den heutigen Tag ein. Die Form ist der Wert vor der heutigen Belastung. Die gesamte importierte Historie zählt, nicht nur der gewählte Zeitraum.</p>
               <Link to="/app/form">Form im Detail</Link>
             </section>

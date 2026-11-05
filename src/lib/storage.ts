@@ -119,6 +119,7 @@ export function loadStravaTokens(): StravaTokens | null {
       expiresAt: parsed.expiresAt,
       athleteLabel: typeof parsed.athleteLabel === 'string' ? parsed.athleteLabel.slice(0, 80) : undefined,
       scope: typeof parsed.scope === 'string' ? parsed.scope : undefined,
+      via: parsed.via === 'hosted' ? 'hosted' : 'own',
     };
   } catch {
     return null;
