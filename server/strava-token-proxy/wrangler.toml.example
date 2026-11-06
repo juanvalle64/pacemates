@@ -1,0 +1,10 @@
+# Vorlage für Cloudflare Workers. Kopieren nach wrangler.toml und anpassen.
+# Das Client Secret NICHT hier eintragen, sondern mit:
+#   npx wrangler secret put STRAVA_CLIENT_SECRET
+name = "pacemates-strava"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+STRAVA_CLIENT_ID = "DEINE_CLIENT_ID"
+ALLOWED_ORIGINS = "https://pacemates.de,https://juanvalle64.github.io,http://127.0.0.1:43123,http://localhost:43123"

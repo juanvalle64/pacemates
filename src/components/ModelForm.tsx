@@ -8,6 +8,7 @@ function NumericField({
   min,
   max,
   suffix,
+  help,
   onCommit,
 }: {
   label: string;
@@ -15,6 +16,7 @@ function NumericField({
   min: number;
   max: number;
   suffix: string;
+  help?: string;
   onCommit: (value: number | undefined) => void;
 }) {
   const [text, setText] = useState(value === undefined ? '' : String(value));
@@ -26,6 +28,7 @@ function NumericField({
         inputMode="numeric"
         value={text}
         placeholder={suffix}
+        aria-invalid={Boolean(error)}
         onChange={(event) => {
           setText(event.target.value);
           setError('');
@@ -45,12 +48,13 @@ function NumericField({
           onCommit(parsed);
         }}
       />
-      {error ? <em className="field-error">{error}</em> : <em>{suffix}</em>}
+      {error ? <em className="field-error" role="alert">{error}</em> : <em>{suffix}</em>}
+      {help ? <small className="field-help">{help}</small> : null}
     </label>
   );
 }
 
-export function ModelForm({ profile, onChange }: { profile: AthleteProfile; onChange: (patch: Partial<AthleteProfile>) => void }) {
+export function ModelForm({ profile, onChange, recordedHr }: { profile: AthleteProfile; onChange: (patch: Partial<AthleteProfile>) => void; recordedHr?: number }) {
   const [runPace, setRunPace] = useState(formatPaceInput(profile.runThresholdPaceSec));
   const [swimPace, setSwimPace] = useState(formatPaceInput(profile.swimThresholdPaceSec));
   const [runError, setRunError] = useState('');
@@ -84,23 +88,34 @@ export function ModelForm({ profile, onChange }: { profile: AthleteProfile; onCh
 
   return (
     <form className="form-grid" onSubmit={(event) => event.preventDefault()}>
-      <NumericField label="Maximale Herzfrequenz" value={profile.maxHr} min={120} max={230} suffix="bpm" onCommit={(maxHr) => onChange({ maxHr })} />
-      <NumericField label="Ruheherzfrequenz" value={profile.restHr} min={30} max={100} suffix="bpm" onCommit={(restHr) => onChange({ restHr })} />
-      <NumericField label="FTP" value={profile.ftp} min={50} max={600} suffix="Watt" onCommit={(ftp) => onChange({ ftp })} />
+      <NumericField
+        label="Maximale Herzfrequenz"
+        value={profile.maxHr}
+        min={120}
+        max={230}
+        suffix="bpm"
+        help={`Der höchste Puls, den du bei voller Ausbelastung erreichst, etwa im Schlussspurt eines Rennens. Altersformeln liegen oft daneben.${recordedHr ? ` In deinen Daten ist der höchste Wert ${recordedHr} bpm. Der echte Wert liegt mindestens so hoch.` : ''}`}
+        onCommit={(maxHr) => onChange({ maxHr })}
+      />
+      <NumericField label="Ruheherzfrequenz" value={profile.restHr} min={30} max={100} suffix="bpm" help="Morgens direkt nach dem Aufwachen, im Liegen. Viele Uhren zeigen den Wert an." onCommit={(restHr) => onChange({ restHr })} />
+      <NumericField label="FTP" value={profile.ftp} min={50} max={600} suffix="Watt" help="Leistung, die du auf dem Rad etwa eine Stunde halten kannst. Nur nötig, wenn deine Fahrten Leistungsdaten haben." onCommit={(ftp) => onChange({ ftp })} />
       <fieldset className="field">
         <legend>TRIMP-Faktor</legend>
+        <small className="field-help">Gewichtet harte Minuten stärker als lockere. Beide Werte stammen aus derselben Formel nach Banister. PaceMates fragt dafür kein Geschlecht ab.</small>
         <label className="check"><input type="radio" name="trimp" checked={profile.trimpK === 1.92} onChange={() => onChange({ trimpK: 1.92 })} /> 1,92, übliche Voreinstellung</label>
         <label className="check"><input type="radio" name="trimp" checked={profile.trimpK === 1.67} onChange={() => onChange({ trimpK: 1.67 })} /> 1,67, Alternative derselben Formel</label>
       </fieldset>
       <label className="field">
         <span>Schwellenpace Laufen</span>
         <input value={runPace} placeholder="m:ss" inputMode="numeric" onChange={(event) => setRunPace(event.target.value)} onBlur={() => commitPace('run', runPace)} />
-        {runError ? <em className="field-error">{runError}</em> : <em>Minuten je Kilometer</em>}
+        {runError ? <em className="field-error" role="alert">{runError}</em> : <em>Minuten je Kilometer</em>}
+        <small className="field-help">Etwa das Tempo, das du im Wettkampf rund eine Stunde halten kannst. Greift nur, wenn eine Einheit keinen verwertbaren Puls hat.</small>
       </label>
       <label className="field">
         <span>Schwellenpace Schwimmen</span>
         <input value={swimPace} placeholder="m:ss" inputMode="numeric" onChange={(event) => setSwimPace(event.target.value)} onBlur={() => commitPace('swim', swimPace)} />
-        {swimError ? <em className="field-error">{swimError}</em> : <em>Minuten je 100 m</em>}
+        {swimError ? <em className="field-error" role="alert">{swimError}</em> : <em>Minuten je 100 m</em>}
+        <small className="field-help">Dein Schwellentempo je 100 m, zum Beispiel aus einem 400-m- und einem 200-m-Test (CSS).</small>
       </label>
     </form>
   );

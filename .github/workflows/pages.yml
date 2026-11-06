@@ -1,5 +1,12 @@
 name: GitHub Pages
 
+# Baut PaceMates und veröffentlicht es auf GitHub Pages.
+# Gesteuert über Repository-Variablen (Settings → Secrets and variables → Actions → Variables):
+#   PACEMATES_DOMAIN   z. B. pacemates.de. Gesetzt: Basispfad "/" und CNAME. Leer: /pacemates/ auf github.io.
+#   STRAVA_CLIENT_ID   öffentliche Client-ID der PaceMates-Strava-Anwendung (optional)
+#   STRAVA_TOKEN_URL   Adresse des Token-Proxys, z. B. https://pacemates-strava.<konto>.workers.dev/token (optional)
+# Das Strava Client Secret gehört NICHT hierher, sondern nur in den Token-Proxy.
+
 on:
   push:
     branches: [main]
@@ -17,6 +24,11 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      VITE_BASE: ${{ vars.PACEMATES_DOMAIN != '' && '/' || '/pacemates/' }}
+      VITE_SITE_URL: ${{ vars.PACEMATES_DOMAIN != '' && format('https://{0}', vars.PACEMATES_DOMAIN) || 'https://juanvalle64.github.io' }}
+      VITE_STRAVA_CLIENT_ID: ${{ vars.STRAVA_CLIENT_ID }}
+      VITE_STRAVA_TOKEN_URL: ${{ vars.STRAVA_TOKEN_URL }}
     steps:
       - name: Repository holen
         uses: actions/checkout@v4
@@ -27,12 +39,15 @@ jobs:
           cache: npm
       - name: Abhängigkeiten installieren
         run: npm ci
+      - name: Lint
+        run: npm run lint
       - name: Tests
         run: npm test
       - name: Produktionsbuild
         run: npm run build
-        env:
-          VITE_BASE: /pacemates/
+      - name: Eigene Domain eintragen
+        if: ${{ vars.PACEMATES_DOMAIN != '' }}
+        run: echo "${{ vars.PACEMATES_DOMAIN }}" > dist/CNAME
       - name: Seitenartefakt hochladen
         uses: actions/upload-pages-artifact@v3
         with:

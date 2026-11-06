@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { NavLink, Outlet } from 'react-router';
+import { Link, NavLink, Outlet } from 'react-router';
+import { useRouteFocus } from '../lib/route-focus.ts';
 import { useAthlete } from '../context/athlete-state.ts';
 import { ThemeSwitch, Wordmark } from './Brand.tsx';
 
@@ -13,14 +14,16 @@ const tabs = [
 ];
 
 export function Shell() {
-  const { profile, updateProfile } = useAthlete();
+  const { profile, updateProfile, activities, ready } = useAthlete();
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const shownName = nameDraft ?? profile.name;
+  useRouteFocus();
   return (
     <div className="shell">
       <a className="skip" href="#inhalt">Zum Inhalt</a>
+      <div className="app-head">
       <header className="topbar">
-        <Wordmark to="/app" />
+        <Wordmark to="/" />
         <div className="topbar-actions">
           <form
             onSubmit={(event) => {
@@ -30,11 +33,12 @@ export function Shell() {
             }}
           >
             <label className="name-field">
-              <span className="sr-only">Name</span>
+              <span className="sr-only">Dein Name, bleibt in diesem Browser</span>
               <input
                 value={shownName}
                 maxLength={40}
-                placeholder="Name, nur lokal"
+                placeholder="Dein Name (optional)"
+                autoComplete="given-name"
                 onChange={(event) => setNameDraft(event.target.value)}
                 onBlur={(event) => {
                   updateProfile({ name: event.target.value.trim() });
@@ -50,13 +54,21 @@ export function Shell() {
         {tabs.map((tab) => (
           <NavLink key={tab.to} to={tab.to} end={tab.end} className={({ isActive }) => (isActive ? 'tab active' : 'tab')}>
             {tab.label}
+            {tab.to === '/app/daten' && ready && activities.length === 0 ? <span className="tab-dot" aria-label="Noch keine Daten" /> : null}
           </NavLink>
         ))}
       </nav>
+      </div>
       <main id="inhalt" className="page">
         <Outlet />
-        <p className="footnote">Aktivitäten bleiben in diesem Browser.</p>
       </main>
+      <footer className="app-footer">
+        <span>Deine Aktivitäten liegen nur in diesem Browser.</span>
+        <nav aria-label="Rechtliches">
+          <Link to="/datenschutz">Datenschutz</Link>
+          <Link to="/impressum">Impressum</Link>
+        </nav>
+      </footer>
     </div>
   );
 }

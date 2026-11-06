@@ -1,4 +1,5 @@
 import { createActivity } from './activity.ts';
+import { stravaHosted, type StravaHostedConfig } from './config.ts';
 import { stravaRedirectUri } from './paths.ts';
 import type { ParsedDraft, StravaSettings, StravaTokens } from './types.ts';
 import { normalizeSport } from './sport.ts';
@@ -27,14 +28,44 @@ export function readStravaCallback(): StravaCallbackParams {
 
 const VERIFIER_KEY = 'pacemates.strava.pkce';
 const STATE_KEY = 'pacemates.strava.state';
-const TOKEN_URL = 'https://www.strava.com/oauth/token';
+const ROUTE_KEY = 'pacemates.strava.route';
+const STRAVA_TOKEN_URL = 'https://www.strava.com/oauth/token';
 const API_URL = 'https://www.strava.com/api/v3/athlete/activities';
+const DEAUTHORIZE_URL = 'https://www.strava.com/oauth/deauthorize';
+const PAGE_SIZE = 200;
+const MAX_PAGES = 20;
 
 export class StravaError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'StravaError';
   }
+}
+
+/**
+ * Welcher Weg zu Strava gerade möglich ist.
+ * hosted: Der Betreiber hat eine Strava-Anwendung und einen Token-Proxy. Das Secret liegt nur dort.
+ * own: Der Sportler nutzt seine eigene Strava-API-Anwendung. Das Secret liegt nur in seinem Browser.
+ * none: Es fehlt eine Client-ID. Dann startet kein Login.
+ */
+export type StravaRoute =
+  | { kind: 'hosted'; clientId: string; tokenUrl: string }
+  | { kind: 'own'; clientId: string; clientSecret: string }
+  | { kind: 'none' };
+
+export function resolveStravaRoute(settings: StravaSettings, hosted: StravaHostedConfig | null = stravaHosted): StravaRoute {
+  if (/^\d{1,12}$/.test(settings.clientId)) return { kind: 'own', clientId: settings.clientId, clientSecret: settings.clientSecret };
+  if (hosted) return { kind: 'hosted', clientId: hosted.clientId, tokenUrl: hosted.tokenUrl };
+  return { kind: 'none' };
+}
+
+/** Der Weg, über den ein gespeichertes Token erneuert werden muss. */
+export function routeForTokens(tokens: StravaTokens, settings: StravaSettings, hosted: StravaHostedConfig | null = stravaHosted): StravaRoute {
+  if (tokens.via === 'hosted') {
+    return hosted ? { kind: 'hosted', clientId: hosted.clientId, tokenUrl: hosted.tokenUrl } : { kind: 'none' };
+  }
+  if (/^\d{1,12}$/.test(settings.clientId)) return { kind: 'own', clientId: settings.clientId, clientSecret: settings.clientSecret };
+  return { kind: 'none' };
 }
 
 function base64url(bytes: Uint8Array): string {
@@ -68,12 +99,13 @@ export function buildAuthorizeUrl(clientId: string, redirectUri: string, challen
   return url.toString();
 }
 
-export async function beginStravaLogin(clientId: string): Promise<void> {
-  if (!/^\d{1,12}$/.test(clientId)) throw new StravaError('Die Client-ID fehlt oder ist keine Zahl.');
+export async function beginStravaLogin(route: StravaRoute): Promise<void> {
+  if (route.kind === 'none') throw new StravaError('Es ist keine Strava-Anwendung eingerichtet. Ohne Client-ID startet kein Login.');
   const pkce = await createPkce();
   sessionStorage.setItem(VERIFIER_KEY, pkce.verifier);
   sessionStorage.setItem(STATE_KEY, pkce.state);
-  window.location.assign(buildAuthorizeUrl(clientId, stravaRedirectUri(), pkce.challenge, pkce.state));
+  sessionStorage.setItem(ROUTE_KEY, route.kind);
+  window.location.assign(buildAuthorizeUrl(route.clientId, stravaRedirectUri(), pkce.challenge, pkce.state));
 }
 
 interface TokenResponse {
@@ -82,7 +114,7 @@ interface TokenResponse {
   expires_at?: number;
   athlete?: { firstname?: string; lastname?: string };
   message?: string;
-  errors?: { field?: string; code?: string }[];
+  errors?: { field?: string; code?: string; resource?: string }[];
 }
 
 function athleteLabel(athlete: TokenResponse['athlete']): string | undefined {
@@ -91,35 +123,78 @@ function athleteLabel(athlete: TokenResponse['athlete']): string | undefined {
   return label || undefined;
 }
 
-export function explainStravaFailure(body: TokenResponse, status: number): string {
+export function explainStravaFailure(body: TokenResponse, status: number, via: 'hosted' | 'own' = 'own'): string {
   const field = body.errors?.find((error) => error.field)?.field;
-  if (field === 'client_secret' || /client_secret/i.test(body.message ?? '')) {
-    return 'Strava verlangt beim Token-Tausch ein Client Secret. PKCE allein lehnt der Token-Endpunkt derzeit ab. Trag das Secret lokal ein und starte die Verbindung erneut. Es bleibt nur in diesem Browser.';
+  if (via === 'own' && (field === 'client_secret' || /client_secret/i.test(body.message ?? ''))) {
+    return 'Strava verlangt beim Token-Tausch das Client Secret deiner API-Anwendung. Trag es lokal ein und starte die Verbindung erneut. Es bleibt nur in diesem Browser.';
   }
-  if (status === 401) return 'Strava hat den Zugang abgelehnt. Prüfe Client-ID und Secret oder verbinde dich erneut.';
+  if (field === 'code' || /authorization code/i.test(body.message ?? '')) {
+    return 'Der Anmeldecode von Strava ist abgelaufen oder wurde schon benutzt. Starte die Verbindung erneut.';
+  }
+  if (field === 'refresh_token') {
+    return 'Strava hat die Verbindung nicht erneuert. Vermutlich wurde der Zugriff bei Strava widerrufen. Verbinde dich erneut.';
+  }
+  if (field === 'redirect_uri' || /redirect/i.test(body.message ?? '')) {
+    return 'Strava akzeptiert die Rückleitungs-URL nicht. Die Callback-Domain der Strava-Anwendung muss zu dieser Seite passen.';
+  }
+  if (status === 429) return 'Strava begrenzt gerade die Anfragen. Versuch es in etwa 15 Minuten erneut.';
+  if (via === 'hosted' && status === 403) return 'Der Strava-Dienst von PaceMates nimmt Anfragen von dieser Adresse nicht an.';
+  if (via === 'hosted' && status >= 500) return 'Der Strava-Dienst von PaceMates ist gerade nicht erreichbar. Der Datei-Import funktioniert weiter.';
+  if (status === 401) return via === 'own'
+    ? 'Strava hat den Zugang abgelehnt. Prüfe Client-ID und Secret oder verbinde dich erneut.'
+    : 'Strava hat den Zugang abgelehnt. Verbinde dich erneut.';
   return body.message ? `Strava: ${body.message}` : `Strava antwortet mit Status ${status}.`;
 }
 
-async function postToken(body: URLSearchParams): Promise<StravaTokens> {
-  let response: Response;
-  try {
-    response = await fetch(TOKEN_URL, {
+function tokenRequest(route: Exclude<StravaRoute, { kind: 'none' }>, fields: Record<string, string>): { url: string; init: RequestInit } {
+  if (route.kind === 'hosted') {
+    // Der Proxy ergänzt client_id und client_secret serverseitig.
+    return {
+      url: route.tokenUrl,
+      init: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+      },
+    };
+  }
+  const body = new URLSearchParams({ client_id: route.clientId, ...fields });
+  if (route.clientSecret) body.set('client_secret', route.clientSecret);
+  return {
+    url: STRAVA_TOKEN_URL,
+    init: {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body,
-    });
+    },
+  };
+}
+
+async function postToken(route: Exclude<StravaRoute, { kind: 'none' }>, fields: Record<string, string>): Promise<StravaTokens> {
+  const { url, init } = tokenRequest(route, fields);
+  let response: Response;
+  try {
+    response = await fetch(url, { ...init, signal: AbortSignal.timeout(20_000) });
   } catch {
-    throw new StravaError('Strava ist nicht erreichbar. Der Datei-Import funktioniert ohne Verbindung.');
+    throw new StravaError(route.kind === 'hosted'
+      ? 'Der Strava-Dienst von PaceMates ist nicht erreichbar. Der Datei-Import funktioniert ohne Verbindung.'
+      : 'Strava ist nicht erreichbar. Der Datei-Import funktioniert ohne Verbindung.');
   }
-  const payload = await response.json() as TokenResponse;
+  let payload: TokenResponse = {};
+  try {
+    payload = await response.json() as TokenResponse;
+  } catch {
+    payload = {};
+  }
   if (!response.ok || !payload.access_token || !payload.refresh_token || !payload.expires_at) {
-    throw new StravaError(explainStravaFailure(payload, response.status));
+    throw new StravaError(explainStravaFailure(payload, response.status, route.kind));
   }
   return {
     accessToken: payload.access_token,
     refreshToken: payload.refresh_token,
     expiresAt: payload.expires_at,
     athleteLabel: athleteLabel(payload.athlete),
+    via: route.kind,
   };
 }
 
@@ -129,18 +204,19 @@ async function exchangeOnce(code: string, settings: StravaSettings, scope: strin
   const verifier = sessionStorage.getItem(VERIFIER_KEY);
   const expectedState = sessionStorage.getItem(STATE_KEY);
   if (!verifier || !expectedState) throw new StravaError('Die Anmeldung ist abgelaufen. Starte die Strava-Verbindung erneut.');
-  const body = new URLSearchParams({
-    client_id: settings.clientId,
+  const startedVia = sessionStorage.getItem(ROUTE_KEY);
+  const route = resolveStravaRoute(startedVia === 'hosted' ? { clientId: '', clientSecret: '' } : settings);
+  if (route.kind === 'none') throw new StravaError('Die Strava-Anwendung ist nicht mehr eingerichtet. Starte die Verbindung erneut.');
+  const tokens = await postToken(route, {
     code,
     grant_type: 'authorization_code',
     code_verifier: verifier,
     redirect_uri: stravaRedirectUri(),
   });
-  if (settings.clientSecret) body.set('client_secret', settings.clientSecret);
-  const tokens = await postToken(body);
   sessionStorage.removeItem(VERIFIER_KEY);
   sessionStorage.removeItem(STATE_KEY);
-  return { ...tokens, scope: scope ?? undefined, athleteLabel: tokens.athleteLabel };
+  sessionStorage.removeItem(ROUTE_KEY);
+  return { ...tokens, scope: scope ?? undefined };
 }
 
 export function exchangeAuthorizationCode(code: string, settings: StravaSettings, scope: string | null): Promise<StravaTokens> {
@@ -158,22 +234,35 @@ export function takeExpectedState(): string | null {
   return sessionStorage.getItem(STATE_KEY);
 }
 
-export async function refreshStravaTokens(settings: StravaSettings, tokens: StravaTokens): Promise<StravaTokens> {
-  if (tokens.expiresAt * 1000 - Date.now() > 120_000) return tokens;
-  if (!settings.clientId || !settings.clientSecret || !tokens.refreshToken) {
-    throw new StravaError('Das Zugangs-Token ist abgelaufen. Zum Erneuern braucht PaceMates die lokal gespeicherte Client-ID, das Client Secret und das Refresh-Token. Verbinde dich erneut.');
+export async function refreshStravaTokens(settings: StravaSettings, tokens: StravaTokens, force = false): Promise<StravaTokens> {
+  if (!force && tokens.expiresAt * 1000 - Date.now() > 120_000) return tokens;
+  const route = routeForTokens(tokens, settings);
+  if (route.kind === 'none' || !tokens.refreshToken) {
+    throw new StravaError('Der Strava-Zugang ist abgelaufen und lässt sich auf diesem Weg nicht erneuern. Verbinde dich erneut.');
   }
-  const body = new URLSearchParams({
-    client_id: settings.clientId,
-    client_secret: settings.clientSecret,
-    grant_type: 'refresh_token',
-    refresh_token: tokens.refreshToken,
-  });
-  const refreshed = await postToken(body);
+  if (route.kind === 'own' && !route.clientSecret) {
+    throw new StravaError('Der Strava-Zugang ist abgelaufen. Zum Erneuern braucht PaceMates das lokal gespeicherte Client Secret deiner API-Anwendung. Trag es ein oder verbinde dich erneut.');
+  }
+  const refreshed = await postToken(route, { grant_type: 'refresh_token', refresh_token: tokens.refreshToken });
   return { ...tokens, ...refreshed, athleteLabel: refreshed.athleteLabel ?? tokens.athleteLabel, scope: tokens.scope };
 }
 
-interface StravaActivity {
+/** Widerruft den Zugriff bei Strava, so weit der Browser das zulässt. Fehler werden nicht verschwiegen, aber auch nicht geworfen. */
+export async function revokeStrava(tokens: StravaTokens): Promise<boolean> {
+  try {
+    const response = await fetch(DEAUTHORIZE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ access_token: tokens.accessToken }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+export interface StravaActivity {
   id?: number;
   name?: string;
   type?: string;
@@ -194,28 +283,96 @@ interface StravaActivity {
   suffer_score?: number;
 }
 
-export async function fetchStravaActivities(token: string, onPage?: (count: number) => void): Promise<StravaActivity[]> {
+export interface StravaFetchResult {
+  activities: StravaActivity[];
+  /** true, wenn Strava wegen Rate-Limit abgebrochen hat. Was bis dahin kam, ist enthalten. */
+  limited: boolean;
+  capped: boolean;
+}
+
+export class StravaAuthError extends StravaError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'StravaAuthError';
+  }
+}
+
+export async function fetchStravaActivities(token: string, options: { after?: number; onPage?: (count: number) => void } = {}): Promise<StravaFetchResult> {
   const all: StravaActivity[] = [];
-  for (let page = 1; page <= 20; page += 1) {
+  for (let page = 1; page <= MAX_PAGES; page += 1) {
+    const url = new URL(API_URL);
+    url.searchParams.set('per_page', String(PAGE_SIZE));
+    url.searchParams.set('page', String(page));
+    if (options.after && options.after > 0) url.searchParams.set('after', String(Math.floor(options.after)));
     let response: Response;
     try {
-      response = await fetch(`${API_URL}?per_page=200&page=${page}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      response = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(30_000) });
     } catch {
-      throw new StravaError('Die Aktivitäten konnten nicht geladen werden. Strava ist vom Browser aus nicht erreichbar.');
+      throw new StravaError('Die Aktivitäten konnten nicht geladen werden. Strava ist vom Browser aus gerade nicht erreichbar.');
     }
-    if (response.status === 401) throw new StravaError('Das Strava-Token ist ungültig oder abgelaufen.');
-    if (response.status === 403) throw new StravaError('Strava verweigert den Zugriff. Die Freigabe activity:read_all fehlt wahrscheinlich.');
+    if (response.status === 401) throw new StravaAuthError('Der Strava-Zugang ist ungültig oder abgelaufen.');
+    if (response.status === 403) throw new StravaError('Strava verweigert den Zugriff. Wahrscheinlich fehlt die Freigabe activity:read_all. Verbinde dich erneut und lass sie angehakt.');
+    if (response.status === 429) return { activities: all, limited: true, capped: false };
     if (!response.ok) throw new StravaError(`Strava antwortet mit Status ${response.status}.`);
     const batch = await response.json() as unknown;
     if (!Array.isArray(batch) || batch.length === 0) break;
     all.push(...batch as StravaActivity[]);
-    onPage?.(all.length);
-    if (batch.length < 200) break;
-    if (page === 20) onPage?.(all.length);
+    options.onPage?.(all.length);
+    if (batch.length < PAGE_SIZE) break;
+    if (page === MAX_PAGES) return { activities: all, limited: false, capped: true };
   }
-  return all;
+  return { activities: all, limited: false, capped: false };
+}
+
+export interface StravaSyncResult {
+  drafts: ParsedDraft[];
+  fetched: number;
+  limited: boolean;
+  capped: boolean;
+  tokens: StravaTokens;
+}
+
+/**
+ * Holt Aktivitäten mit gültigem Token. Ein abgelaufenes Token wird einmal erneuert,
+ * auch wenn Strava es früher als angekündigt ablehnt.
+ */
+export async function syncStrava(
+  settings: StravaSettings,
+  tokens: StravaTokens,
+  options: { after?: number; onPage?: (count: number) => void; onTokens?: (tokens: StravaTokens) => void } = {},
+): Promise<StravaSyncResult> {
+  let current = await refreshStravaTokens(settings, tokens);
+  if (current !== tokens) options.onTokens?.(current);
+  let result: StravaFetchResult;
+  try {
+    result = await fetchStravaActivities(current.accessToken, options);
+  } catch (error) {
+    if (!(error instanceof StravaAuthError)) throw error;
+    current = await refreshStravaTokens(settings, current, true);
+    options.onTokens?.(current);
+    result = await fetchStravaActivities(current.accessToken, options);
+  }
+  return { drafts: mapStravaActivities(result.activities), fetched: result.activities.length, limited: result.limited, capped: result.capped, tokens: current };
+}
+
+/** Startpunkt für einen schnellen Abgleich: eine Woche vor der neuesten Strava-Einheit. Überschneidungen fängt die Dublettenprüfung ab. */
+export function incrementalAfter(activities: { startTime: string; sources: { kind: string }[] }[]): number | undefined {
+  let latest = 0;
+  for (const activity of activities) {
+    if (!activity.sources.some((source) => source.kind === 'strava')) continue;
+    const time = Date.parse(activity.startTime);
+    if (Number.isFinite(time) && time > latest) latest = time;
+  }
+  if (latest === 0) return undefined;
+  return Math.floor(latest / 1000) - 7 * 86_400;
+}
+
+export function describeSync(result: { added: number; merged: number }, sync: Pick<StravaSyncResult, 'fetched' | 'limited' | 'capped'>): string {
+  if (sync.fetched === 0) return 'Strava hat keine neuen Aktivitäten zurückgegeben.';
+  const parts = [`${sync.fetched} von Strava gelesen: ${result.added} neu, ${result.merged} mit vorhandenen zusammengeführt.`];
+  if (sync.limited) parts.push('Strava hat die Abfrage wegen des Rate-Limits gestoppt. Hol den Rest in etwa 15 Minuten.');
+  if (sync.capped) parts.push(`Es wurden höchstens ${PAGE_SIZE * MAX_PAGES} Aktivitäten geholt. Ältere Einheiten kannst du über den Strava-Datenexport importieren.`);
+  return parts.join(' ');
 }
 
 export function mapStravaActivities(activities: StravaActivity[]): ParsedDraft[] {

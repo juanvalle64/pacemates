@@ -1,6 +1,6 @@
 export function parseXml(text: string): Document {
   const doc = new DOMParser().parseFromString(text, 'application/xml');
-  if (doc.getElementsByTagName('parsererror').length > 0) throw new Error('XML nicht lesbar.');
+  if (doc.getElementsByTagName('parsererror').length > 0) throw new Error('Die Datei ist kein gültiges XML. Sie ist vermutlich beschädigt oder wurde nicht vollständig heruntergeladen.');
   return doc;
 }
 

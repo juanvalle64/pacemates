@@ -1,8 +1,7 @@
 import { useState } from 'react';
-import { Link } from 'react-router';
 import { StackedBars } from '../components/Charts.tsx';
 import { SPORT_COLOR } from '../lib/colors.ts';
-import { EmptyState } from '../components/Ui.tsx';
+import { EmptyState, NoDataYet } from '../components/Ui.tsx';
 import { useAthlete } from '../context/athlete-state.ts';
 import { presetRange, type RangePreset } from '../lib/dates.ts';
 import { formatDate, formatDateKey, formatDuration, formatLoad, formatNumber, formatPercent, formatRange } from '../lib/format.ts';
@@ -23,13 +22,11 @@ export function Trends() {
   const [preset, setPreset] = useState<RangePreset>('all');
   const [sport, setSport] = useState<Sport | 'all'>('all');
   const [now] = useState(() => new Date());
-  if (storageError) return <EmptyState title="Speicher nicht verfügbar" body={storageError} />;
+  if (storageError) return <EmptyState level={1} title="Speicher nicht verfügbar" body={storageError} />;
   if (!ready) return <p className="status">Aktivitäten werden gelesen …</p>;
   if (evaluated.length === 0) {
     return (
-      <EmptyState title="Noch kein Verlauf" body="Trends erscheinen, sobald mindestens eine echte Aktivität importiert ist.">
-        <Link className="btn btn-primary" to="/app/daten">Daten hinzufügen</Link>
-      </EmptyState>
+      <NoDataYet title="Noch kein Verlauf" body="Hier erscheinen Zeit, Belastung und Intensität pro Woche im Verlauf, getrennt nach Sportart. Dafür braucht es mindestens eine importierte Einheit." />
     );
   }
   const earliest = new Date(Math.min(...evaluated.map((activity) => Date.parse(activity.startTime))));
@@ -44,8 +41,7 @@ export function Trends() {
     <>
       <header className="page-head">
         <div>
-          <p className="kicker">Verlauf</p>
-          <h1>Trends</h1>
+          <h1 tabIndex={-1}>Trends</h1>
           <p>{formatRange(range.start, range.end)}</p>
         </div>
         <div className="chip-row" role="group" aria-label="Zeitraum">

@@ -3,13 +3,24 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PaceMates · Ausdauer, aus deinen Daten</title>
     <meta
       name="description"
-      content="PaceMates zeigt Umfang, Intensität, Form und Erholung aus deinen eigenen Ausdauer-Aktivitäten. Die Daten bleiben im Browser."
+      content="PaceMates zeigt Umfang, Intensität, Verlauf, Form und Erholung aus deinen eigenen Lauf-, Rad- und Schwimmeinheiten aus Garmin und Strava. Kein Konto, keine Beispieldaten, die Daten bleiben im Browser."
     />
-    <meta name="theme-color" content="#f3ecdf" />
+    <meta name="theme-color" content="#1f3dff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0a0c10" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="de_DE" />
+    <meta property="og:site_name" content="PaceMates" />
+    <meta property="og:title" content="PaceMates · Sieh, was dein Training wirklich tut." />
+    <meta property="og:description" content="Umfang, Intensität, Form und Erholung aus deinen eigenen Garmin- und Strava-Daten. Kein Konto, keine Beispieldaten." />
+    <meta property="og:image" content="%PACEMATES_OG_IMAGE%" />
+    <meta name="twitter:card" content="summary_large_image" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <title>PaceMates</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
     <script>
       try {
         var theme = localStorage.getItem('pacemates.theme');

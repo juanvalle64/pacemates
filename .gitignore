@@ -25,3 +25,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Strava-Proxy: lokale Secrets
+.dev.vars
+server/**/wrangler.toml
+.wrangler

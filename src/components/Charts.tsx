@@ -37,7 +37,7 @@ export function StackedBars({
   if (rows.length === 0 || rows.every((row) => row.segments.every((segment) => segment.value <= 0))) return null;
   const width = 720;
   const height = 240;
-  const pad = { left: 44, right: 8, top: 12, bottom: 36 };
+  const pad = { left: 72, right: 8, top: 12, bottom: 36 };
   const innerWidth = width - pad.left - pad.right;
   const innerHeight = height - pad.top - pad.bottom;
   const max = niceMax(Math.max(...rows.map((row) => row.segments.reduce((sum, segment) => sum + segment.value, 0))));
@@ -117,7 +117,7 @@ export function Lines({
   if (categories.length === 0 || series.every((item) => item.values.every((value) => value === 0))) return null;
   const width = 720;
   const height = 260;
-  const pad = { left: 48, right: 12, top: 16, bottom: 32 };
+  const pad = { left: 60, right: 12, top: 16, bottom: 32 };
   const innerWidth = width - pad.left - pad.right;
   const innerHeight = height - pad.top - pad.bottom;
   const values = series.flatMap((item) => item.values);
