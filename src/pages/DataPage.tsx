@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Link } from 'react-router';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router';
 import { ActivityIndex, applySportOverride, withStartTime } from '../lib/activity.ts';
 import { backupFileName, buildBackup } from '../lib/backup.ts';
 import { fromDatetimeLocalValue, toDatetimeLocalValue } from '../lib/dates.ts';
@@ -48,6 +48,9 @@ export function DataPage() {
   const [backupProfile, setBackupProfile] = useState<AthleteProfile | null>(null);
   const [applyBackupProfile, setApplyBackupProfile] = useState(true);
   const [justImported, setJustImported] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const handedOver = useRef(false);
   const libraryIndex = useMemo(() => new ActivityIndex(activities), [activities]);
   const loadedById = useMemo(() => new Map(allLoaded.map((activity) => [activity.id, activity])), [allLoaded]);
 
@@ -82,6 +85,16 @@ export function DataPage() {
     }
   }
 
+  // Dateien, die auf der Startseite abgelegt wurden, kommen direkt in die Vorschau.
+  useEffect(() => {
+    const files = (location.state as { files?: File[] } | null)?.files;
+    if (handedOver.current || !files || files.length === 0) return;
+    handedOver.current = true;
+    navigate(`${location.pathname}#dateien`, { replace: true, state: null });
+    void ingest(files);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
+
   function updateRow(key: string, activity: Activity, include = true) {
     setReview((rows) => rows?.map((row) => (row.key === key ? { ...row, activity, include: include && Boolean(activity.startTime) } : row)) ?? null);
   }
@@ -113,7 +126,6 @@ export function DataPage() {
     <>
       <header className="page-head">
         <div>
-          <p className="kicker">Bleibt in diesem Browser</p>
           <h1 tabIndex={-1}>Datenquellen</h1>
           <p className="lead-sm">Dateien funktionieren sofort und ohne Konto. Strava geht über den Login. Garmin geht über den Export.</p>
         </div>

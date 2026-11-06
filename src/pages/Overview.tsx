@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { StackedBars } from '../components/Charts.tsx';
 import { SPORT_COLOR } from '../lib/colors.ts';
+import { FormBib } from '../components/FormBib.tsx';
 import { Onboarding } from '../components/Onboarding.tsx';
 import { EmptyState, SportMark } from '../components/Ui.tsx';
 import { highestRecordedHr, loadMix, readForm } from '../lib/form-reading.ts';
@@ -56,9 +57,8 @@ export function Overview() {
     <>
       <header className="page-head">
         <div>
-          <p className="kicker">{profile.name || 'Dein Training'}</p>
-          <h1 tabIndex={-1}>Übersicht</h1>
-          <p>{formatRange(range.start, range.end)}</p>
+          <h1 tabIndex={-1}>{profile.name ? `Übersicht für ${profile.name}` : 'Übersicht'}</h1>
+          <p className="page-sub">{formatRange(range.start, range.end)}</p>
         </div>
         <div className="chip-row" role="group" aria-label="Zeitraum">
           {ranges.map((item) => (
@@ -125,20 +125,10 @@ export function Overview() {
             </section>
           ) : null}
           {latest && reading ? (
-            <section className={`card card-accent form-${reading.tone}`}>
-              <div className="card-head">
-                <h2>Form</h2>
-                <span className={`badge badge-${reading.tone}`}>{reading.title}</span>
-              </div>
-              <div className="stat-grid compact">
-                <article className="stat"><span>Fitness, CTL</span><strong className="num">{formatLoad(latest.ctl)}</strong></article>
-                <article className="stat"><span>Ermüdung, ATL</span><strong className="num">{formatLoad(latest.atl)}</strong></article>
-                <article className="stat"><span>Form heute früh, TSB</span><strong className="num">{formatLoad(latest.tsb)}</strong></article>
-              </div>
-              <p>{reading.body}</p>
-              <p className="meta">Fitness und Ermüdung schließen den heutigen Tag ein. Die Form ist der Wert vor der heutigen Belastung. Die gesamte importierte Historie zählt, nicht nur der gewählte Zeitraum.</p>
-              <Link to="/app/form">Form im Detail</Link>
-            </section>
+            <FormBib point={latest} reading={reading}>
+              <p className="meta">Fitness und Ermüdung schließen den heutigen Tag ein. Die Form ist der Wert vor der heutigen Belastung. Es zählt die gesamte importierte Historie, nicht nur der gewählte Zeitraum.</p>
+              <Link className="text-link" to="/app/form">Form im Detail</Link>
+            </FormBib>
           ) : null}
           <section className="card">
             <h2>Stunden pro Woche</h2>

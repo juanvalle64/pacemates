@@ -41,7 +41,6 @@ export function Trends() {
     <>
       <header className="page-head">
         <div>
-          <p className="kicker">Verlauf</p>
           <h1 tabIndex={-1}>Trends</h1>
           <p>{formatRange(range.start, range.end)}</p>
         </div>

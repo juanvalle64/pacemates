@@ -74,7 +74,6 @@ export function StravaCallback() {
 
   return (
     <main id="inhalt" className="page narrow">
-      <p className="kicker">Strava</p>
       <h1>{problem ? 'Verbindung nicht fertig' : 'Strava wird verbunden'}</h1>
       <p className={problem ? 'note note-warn' : 'status'} role={problem ? 'alert' : 'status'}>{problem ?? progress}</p>
       <div className="row-actions">

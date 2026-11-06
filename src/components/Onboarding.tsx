@@ -5,7 +5,6 @@ import { stravaHosted } from '../lib/config.ts';
 export function Onboarding() {
   return (
     <section className="onboarding" aria-labelledby="start-titel">
-      <p className="kicker">Erster Start</p>
       <h1 id="start-titel" tabIndex={-1}>Hol deine ersten Einheiten rein.</h1>
       <p className="lead-sm">PaceMates rechnet nur mit deinen eigenen Aktivitäten. Solange keine da sind, bleibt jede Auswertung leer. Es gibt keine Beispielkurven.</p>
       <ol className="onboarding-steps">

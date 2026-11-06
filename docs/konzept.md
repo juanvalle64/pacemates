@@ -63,21 +63,16 @@ Persönlichkeit: präzise, ruhig, ehrlich, sportlich-trocken. Wie ein gutes Trai
 | „Du entscheidest“ | Medizinische oder Doping-nahe Aussagen |
 | Vergleich mit dir selbst | Vergleich mit anderen, Ranglisten |
 
-### Visuelle Richtung: „Bahn und Kreide“
+### Visuelle Richtung: „Startnummer“
 
-- **Farben**
-  - Kreide `#f3f0e8` (Hintergrund hell), Fläche `#fbfaf6`
-  - Asphalt `#15171a` (Schrift, Primärknopf, dunkle Bänder)
-  - Tartan `#b0361a` hell / `#ff7a4d` dunkel (Akzent: Kicker, Bildmarke, Fokus, Laufbahn)
-  - Sportfarben: Laufen Tartan, Rad Waldgrün `#1f5c40`, Schwimmen Tiefsee `#0e5466`, Kombi Violett `#5c3d78`
-  - Modellfarben: Fitness Ocker `#8a5a12`, Ermüdung Rot `#a12f2f`, Form Grün `#1d6b43`
-  - Kein Lila-Verlauf, keine Neonfarben.
-- **Typografie:** Barlow Condensed 700 für Überschriften und große Zahlen (Anzeigetafel, Tempo), Versalien für Seitentitel. Outfit für Text. Zahlen immer tabellarisch. Beide Schriften lokal eingebunden, nicht von Google geladen.
-- **Wortmarke:** „PaceMates“ in Barlow Condensed Kursiv, davor die Bildmarke: eine Laufbahn von oben mit Startlinie.
-- **Motiv:** Bahnlinien. Konzentrische Bahnen, Bahnnummern, Startlinie. Drei Bahnen tragen die Begriffe „Umfang, Intensität, Erholung“. Das Motiv ist Grafik, nie ein Diagramm mit erfundenen Werten.
-- **Bildsprache:** Keine Stockfotos lachender „Kunden“. Wenn Fotos, dann echte, freigegebene Aufnahmen von Strecke, Bahn, Wasser, Rad, ohne erkennbare Personen ohne Einwilligung. Bis dahin reicht Typografie plus Bahnmotiv.
-- **Screenshots in Werbung:** nur mit echten eigenen Daten nach Freigabe, nie mit sichtbarem Client Secret, Token oder Name eines Dritten.
+Ausgewählt am 6. November 2026, ersetzt „Bahn und Kreide“. Details, Farben und Bausteine: `DESIGN.md`.
+
+- **Welt:** die Startnummer. Tyvek-Weiß, Startnummer-Schwarz, Signalblau als Farbfeld, Nadellöcher, perforierter Abschnitt.
+- **Schrift:** eine Familie, Archivo, breit und schwer für Überschriften und Zahlen, normal breit für Text.
+- **Erkennungszeichen in der App:** deine heutige Form als Startnummer.
+- **Bildsprache:** keine Stockfotos. Typografie, Farbfeld und das Startnummer-Objekt tragen die Marke. Echte Fotos nur mit Freigabe.
+- **Bewusst vermieden:** Cremegrund mit Terrakotta, schmale Versal-Überschriften, Labels über Überschriften, gleich große Icon-Karten, farbige Seitenstreifen, Verläufe.
 
 ### Designsystem im Code
 
-Alle Tokens stehen am Anfang von `src/styles.css` (hell und dunkel). Bausteine: `btn` (primary, ghost, strava, small, large, danger), `card` (primary, accent, danger), `badge`, `note` (ok, warn, action), `stat`, `chip`, `field` mit `field-help`, `drop`, `steps`, `pick`. Bildmarke und Bahnmotiv: `src/components/Brand.tsx`.
+Alle Tokens stehen am Anfang von `src/styles.css` (hell und dunkel). Bausteine: `btn` (primary, ghost, strava, small, large, danger, on-field), `card`, `pill`, `note` (ok, warn, action), `stat`, `chip`, `field`, `drop`, `bib`. Logo und Startnummer: `src/components/Brand.tsx`, Form-Startnummer: `src/components/FormBib.tsx`.

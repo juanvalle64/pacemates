@@ -1,4 +1,5 @@
 import { Lines } from '../components/Charts.tsx';
+import { FormBib } from '../components/FormBib.tsx';
 import { ModelForm } from '../components/ModelForm.tsx';
 import { EmptyState, NoDataYet } from '../components/Ui.tsx';
 import { useAthlete } from '../context/athlete-state.ts';
@@ -32,21 +33,11 @@ export function FormPage() {
     <>
       <header className="page-head">
         <div>
-          <p className="kicker">Fitness, Ermüdung, Form</p>
           <h1 tabIndex={-1}>Form & Erholung</h1>
           <p className="lead-sm">Wie viel Training du trägst, wie müde du gerade bist, und was davon übrig bleibt.</p>
         </div>
       </header>
-      <section className="stat-grid">
-        <article className="stat"><span>Fitness, CTL</span><strong className="num">{formatLoad(latest.ctl)}</strong></article>
-        <article className="stat"><span>Ermüdung, ATL</span><strong className="num">{formatLoad(latest.atl)}</strong></article>
-        <article className="stat"><span>Form heute früh, TSB</span><strong className="num">{formatLoad(latest.tsb)}</strong></article>
-      </section>
-      {reading ? (
-        <div className={`note form-note form-${reading.tone}`} role="status">
-          <p><strong>{reading.title}.</strong> {reading.body}</p>
-        </div>
-      ) : null}
+      {reading ? <FormBib point={latest} reading={reading} /> : null}
       <section className="card explain" aria-labelledby="lesen-titel">
         <h2 id="lesen-titel">So liest du die drei Werte</h2>
         <dl className="explain-grid">
@@ -89,7 +80,7 @@ export function FormPage() {
       </section>
       <section className="card">
         <h2>Woraus die Belastung kommt</h2>
-        <ul className="split">
+        <ul className="split split-3">
           {mix.map((item) => (
             <li key={item.method}>
               <span>{methodLabel(item.method)}</span>

@@ -4,37 +4,41 @@
 <meta charset="utf-8" />
 <title>PaceMates Karte</title>
 <!--
-  Vorlage für Launch-Grafiken. Gerendert mit marketing/render.cjs.
+  Vorlage für Launch-Grafiken im Stil „Startnummer“. Gerendert mit marketing/render.cjs.
   Parameter in der Adresse: ?w=1080&h=1350&v=post-1
   Keine Zahlen, keine Kurven, keine Personen: nur Aussagen, die die Software hält.
 -->
 <style>
-  @font-face { font-family: "Barlow Condensed"; font-weight: 700; src: url("../../node_modules/@fontsource/barlow-condensed/files/barlow-condensed-latin-700-normal.woff2") format("woff2"); }
-  @font-face { font-family: "Barlow Condensed"; font-weight: 700; font-style: italic; src: url("../../node_modules/@fontsource/barlow-condensed/files/barlow-condensed-latin-700-italic.woff2") format("woff2"); }
-  @font-face { font-family: "Outfit"; font-weight: 400; src: url("../../node_modules/@fontsource/outfit/files/outfit-latin-400-normal.woff2") format("woff2"); }
-  @font-face { font-family: "Outfit"; font-weight: 600; src: url("../../node_modules/@fontsource/outfit/files/outfit-latin-600-normal.woff2") format("woff2"); }
-  :root { --chalk: #f3f0e8; --asphalt: #15171a; --tartan: #b0361a; }
+  @font-face {
+    font-family: "Archivo"; font-weight: 100 900; font-stretch: 62% 125%;
+    src: url("../../node_modules/@fontsource-variable/archivo/files/archivo-latin-wdth-normal.woff2") format("woff2-variations");
+  }
+  :root { --blue: #1f3dff; --ink: #0b0d12; }
   * { box-sizing: border-box; margin: 0; }
   html, body { width: var(--w); height: var(--h); overflow: hidden; }
-  body { font-family: Outfit, sans-serif; background: var(--chalk); color: var(--asphalt); position: relative; }
-  .frame { position: absolute; inset: 0; padding: calc(var(--u) * 7); display: flex; flex-direction: column; justify-content: space-between; }
-  .dark { background: var(--asphalt); color: var(--chalk); }
-  .red { background: var(--tartan); color: #fff; }
-  .mark { display: flex; align-items: center; gap: calc(var(--u) * 1.6); font-family: "Barlow Condensed"; font-style: italic; font-weight: 700; font-size: calc(var(--u) * 5); }
-  .mark svg { width: calc(var(--u) * 7); color: var(--tartan); }
-  .red .mark svg, .dark .mark svg { color: currentColor; }
-  .kicker { text-transform: uppercase; letter-spacing: 0.16em; font-weight: 600; font-size: calc(var(--u) * 2.4); color: var(--tartan); margin-bottom: calc(var(--u) * 3); }
-  .red .kicker { color: #fff; opacity: 0.85; }
-  .dark .kicker { color: #ff7a4d; }
-  h1 { font-family: "Barlow Condensed"; font-weight: 700; text-transform: uppercase; line-height: 0.92; font-size: calc(var(--u) * var(--size, 13)); letter-spacing: -0.005em; }
-  p.sub { font-size: calc(var(--u) * 3.1); line-height: 1.35; margin-top: calc(var(--u) * 3.5); max-width: 32ch; opacity: 0.9; }
-  .foot { display: flex; justify-content: space-between; align-items: flex-end; font-size: calc(var(--u) * 2.5); gap: 20px; }
-  .lanes { position: absolute; right: 0; top: 0; bottom: 0; width: 34%; pointer-events: none; }
-  .lanes rect { fill: none; stroke: currentColor; stroke-width: 3; opacity: 0.18; }
-  .red .lanes rect { opacity: 0.4; }
-  ul { list-style: none; padding: 0; margin-top: calc(var(--u) * 4); display: grid; gap: calc(var(--u) * 1.6); font-size: calc(var(--u) * 3); }
-  li::before { content: ""; display: inline-block; width: calc(var(--u) * 2.4); height: 4px; background: var(--tartan); vertical-align: middle; margin-right: calc(var(--u) * 1.6); }
-  .dark li::before { background: #ff7a4d; }
+  body { font-family: Archivo, sans-serif; background: var(--blue); color: #fff; position: relative; -webkit-font-smoothing: antialiased; }
+  body.ink { background: var(--ink); }
+  .frame { position: absolute; inset: 0; padding: calc(var(--u) * 6); display: flex; flex-direction: column; gap: calc(var(--u) * 4); }
+  .top { display: flex; justify-content: space-between; align-items: center; font-weight: 600; font-size: calc(var(--u) * 2.4); }
+  .logo { display: flex; align-items: center; gap: calc(var(--u) * 1.4); font-stretch: 125%; font-weight: 800; font-size: calc(var(--u) * 3.4); letter-spacing: -0.02em; }
+  .logo svg { width: calc(var(--u) * 6); }
+  .bib { flex: 1; position: relative; background: #fff; color: var(--ink); border-radius: calc(var(--u) * 1.4); overflow: hidden; display: flex; flex-direction: column;
+    box-shadow: 0 6px 12px rgba(4,10,60,.2), 0 40px 80px -20px rgba(4,10,60,.55); transform: rotate(-1deg); }
+  .band { background: var(--ink); color: #fff; display: flex; justify-content: space-between; padding: calc(var(--u) * 2.4) calc(var(--u) * 5); font-size: calc(var(--u) * 2.2); font-weight: 500; }
+  .band b { font-stretch: 125%; font-weight: 800; }
+  .body { position: relative; flex: 1; padding: calc(var(--u) * 5); display: flex; flex-direction: column; justify-content: center; }
+  .pin { position: absolute; width: calc(var(--u) * 1.6); height: calc(var(--u) * 1.6); border-radius: 50%; background: var(--blue); box-shadow: inset 0 1px 2px rgba(0,0,0,.35); }
+  body.ink .pin { background: var(--ink); }
+  h1 { font-stretch: 125%; font-weight: 800; letter-spacing: -0.035em; line-height: 0.98; font-size: calc(var(--u) * var(--size, 10)); }
+  p.sub { font-size: calc(var(--u) * 2.9); line-height: 1.38; margin-top: calc(var(--u) * 3.4); color: #3d4454; max-width: 34ch; }
+  ul { list-style: none; padding: 0; margin-top: calc(var(--u) * 3.6); display: grid; gap: 0; font-size: calc(var(--u) * 2.8); font-weight: 600; }
+  li { padding: calc(var(--u) * 1.5) 0; border-top: 1px solid #dde1e8; }
+  .tear { border-top: 3px dashed #c9ced8; padding: calc(var(--u) * 2.6) calc(var(--u) * 5); display: flex; justify-content: space-between; align-items: center; font-size: calc(var(--u) * 2.4); color: #4a5163; position: relative; }
+  .tear strong { color: var(--ink); font-stretch: 112%; font-weight: 700; }
+  .tear::before, .tear::after { content: ""; position: absolute; top: calc(var(--u) * -1.2); width: calc(var(--u) * 2.2); height: calc(var(--u) * 2.2); border-radius: 50%; background: var(--blue); }
+  body.ink .tear::before, body.ink .tear::after { background: var(--ink); }
+  .tear::before { left: calc(var(--u) * -1.1); }
+  .tear::after { right: calc(var(--u) * -1.1); }
 </style>
 </head>
 <body>
@@ -44,26 +48,27 @@
   const w = Number(q.get('w') || 1200), h = Number(q.get('h') || 630);
   document.documentElement.style.setProperty('--w', w + 'px');
   document.documentElement.style.setProperty('--h', h + 'px');
-  document.documentElement.style.setProperty('--u', Math.min(w, h) / 100 * (h / w > 1.5 ? 1.35 : 1) + 'px');
-  const mark = '<div class="mark"><svg viewBox="0 0 48 32"><rect x="2" y="3" width="44" height="26" rx="13" fill="none" stroke="currentColor" stroke-width="3"/><rect x="9" y="10" width="30" height="12" rx="6" fill="none" stroke="currentColor" stroke-width="1.6" opacity="0.55"/><path d="M30 3v7" stroke="currentColor" stroke-width="3"/></svg>PaceMates</div>';
-  const lanes = '<svg class="lanes" viewBox="0 0 300 600" preserveAspectRatio="xMaxYMid slice">' + [0, 34, 68, 102].map(d => `<rect x="${40 + d}" y="${-200 + d}" width="${600 - 2 * d}" height="${1000 - 2 * d}" rx="${260 - d}"/>`).join('') + '</svg>';
+  document.documentElement.style.setProperty('--u', Math.min(w, h) / 100 * (h / w > 1.5 ? 1.25 : 1) + 'px');
+  const logo = '<div class="logo"><svg viewBox="0 0 32 24"><rect x="1" y="1" width="30" height="22" rx="3" fill="#fff"/><rect x="1" y="1" width="30" height="7" rx="3" fill="#0b0d12"/><rect x="1" y="5" width="30" height="3" fill="#0b0d12"/></svg>PaceMates</div>';
   const variants = {
-    og: { cls: '', kicker: 'Ausdauer, aus deinen Daten', title: 'Sieh, was dein Training wirklich tut.', size: 11, sub: 'Umfang, Intensität, Form und Erholung aus deinen eigenen Garmin- und Strava-Daten.' },
-    'post-1': { cls: '', kicker: 'Neu: PaceMates', title: 'Sieh, was dein Training wirklich tut.', size: 14, sub: 'Für Laufen, Rad, Schwimmen und Triathlon. Aus deinen eigenen Garmin- und Strava-Daten.' },
-    'post-2': { cls: 'dark', kicker: 'Ein Grundsatz', title: 'Ohne deine Daten bleibt alles leer.', size: 14, sub: 'Keine Beispielkurven. Keine erfundenen Werte. PaceMates rechnet nur mit dem, was du importierst.' },
-    'post-3': { cls: 'red', kicker: 'Keine Blackbox', title: 'Jeder Tipp zeigt seine Zahl.', size: 14, sub: 'Feste Regeln auf deinen Werten: Belastung der letzten 7 Tage, Form, Monotonie. Du siehst, was den Hinweis auslöst.' },
-    'post-4': { cls: '', kicker: 'Privat', title: 'Deine Einheiten bleiben auf deinem Gerät.', size: 12, list: ['Kein Konto', 'Dateien werden im Browser gelesen', 'Keine Cookies, kein Tracking'] },
-    story: { cls: 'dark', kicker: 'Neu: PaceMates', title: 'Viele Zahlen. Wenig Antworten?', size: 12, list: ['Umfang und Intensität', 'Trends und Vergleiche', 'Form und Erholung', 'Tipps mit Begründung'] },
+    og: { title: 'Sieh, was dein Training wirklich tut.', size: 8.6, sub: 'Umfang, Intensität, Form und Erholung aus deinen eigenen Garmin- und Strava-Daten.' },
+    'post-1': { title: 'Sieh, was dein Training wirklich tut.', size: 10, sub: 'Für Laufen, Rad, Schwimmen und Triathlon. Aus deinen eigenen Garmin- und Strava-Daten.' },
+    'post-2': { cls: 'ink', title: 'Ohne deine Daten bleibt alles leer.', size: 10, sub: 'Keine Beispielkurven. Keine erfundenen Werte. PaceMates rechnet nur mit dem, was du importierst.' },
+    'post-3': { title: 'Jeder Tipp zeigt seine Zahl.', size: 11, sub: 'Feste Regeln auf deinen Werten: Belastung der letzten 7 Tage, Form, Monotonie. Du siehst, was den Hinweis auslöst.' },
+    'post-4': { cls: 'ink', title: 'Deine Einheiten bleiben auf deinem Gerät.', size: 9, list: ['Kein Konto', 'Dateien werden im Browser gelesen', 'Keine Cookies, kein Tracking'] },
+    story: { title: 'Viele Zahlen. Wenig Antworten?', size: 8, list: ['Umfang und Intensität', 'Trends und Vergleiche', 'Form und Erholung', 'Tipps mit Begründung'] },
   };
   const v = variants[q.get('v') || 'og'];
-  document.body.className = v.cls;
+  if (v.cls) document.body.className = v.cls;
   document.documentElement.style.setProperty('--size', v.size);
-  document.getElementById('frame').innerHTML = lanes +
-    `<div>${mark}</div>` +
-    `<div style="position:relative"><p class="kicker">${v.kicker}</p><h1>${v.title}</h1>` +
+  const pins = '<span class="pin" style="top:calc(var(--u)*2);left:calc(var(--u)*2)"></span><span class="pin" style="top:calc(var(--u)*2);right:calc(var(--u)*2)"></span>';
+  document.getElementById('frame').innerHTML =
+    `<div class="top">${logo}<span>pacemates.de</span></div>` +
+    `<div class="bib"><div class="band"><b>PaceMates</b><span>Laufen · Rad · Schwimmen · Triathlon</span></div>` +
+    `<div class="body">${pins}<h1>${v.title}</h1>` +
     (v.sub ? `<p class="sub">${v.sub}</p>` : '') +
     (v.list ? `<ul>${v.list.map(i => `<li>${i}</li>`).join('')}</ul>` : '') + '</div>' +
-    `<div class="foot"><span>Kein Konto · Keine Beispieldaten</span><strong>pacemates.de</strong></div>`;
+    `<div class="tear"><strong>Kein Konto · Keine Beispieldaten</strong><span>pacemates.de</span></div></div>`;
 </script>
 </body>
 </html>

@@ -14,7 +14,6 @@ export function TipsPage() {
     <>
       <header className="page-head">
         <div>
-          <p className="kicker">Nur aus gerechneten Werten</p>
           <h1 tabIndex={-1}>Tipps</h1>
           <p>Jeder Hinweis nennt die Kennzahl, aus der er kommt. Wenn die Daten nicht reichen, bleibt die Liste leer.</p>
         </div>
@@ -40,8 +39,10 @@ export function TipsPage() {
         <ul className="tip-list">
           {report.tips.map((tip) => (
             <li key={tip.id} className={`tip tip-${tip.severity}`}>
-              <p className="kicker">{tip.severity === 'high' ? 'Wichtig' : tip.severity === 'medium' ? 'Hinweis' : tip.severity === 'positive' ? 'Stabil' : 'Einordnung'}</p>
-              <h2>{tip.title}</h2>
+              <div className="tip-head">
+                <h2>{tip.title}</h2>
+                <span className={`pill pill-${tip.severity}`}>{tip.severity === 'high' ? 'Wichtig' : tip.severity === 'medium' ? 'Hinweis' : tip.severity === 'positive' ? 'Stabil' : 'Einordnung'}</span>
+              </div>
               <p>{tip.body}</p>
               <ul className="evidence">
                 {tip.evidence.map((item) => (

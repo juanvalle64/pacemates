@@ -101,7 +101,6 @@ export function Compare() {
     <>
       <header className="page-head">
         <div>
-          <p className="kicker">Zwei Zeiträume</p>
           <h1 tabIndex={-1}>Vergleich</h1>
           <p>Unterschied = linker Zeitraum minus rechter Zeitraum. Mehr Umfang ist hier nicht als besser markiert.</p>
         </div>
